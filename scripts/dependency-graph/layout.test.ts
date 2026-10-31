@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { labelWidth, layoutGraph } from './layout';
+import { countCrossings, labelWidth, layoutGraph } from './layout';
 import type { DependencyLink } from './model';
 
 const node = (name: string) => ({ name });
@@ -13,6 +13,26 @@ describe('labelWidth', () => {
 
 	it('errs on the wide side for a character it has not measured', () => {
 		expect(labelWidth('Tools')).toBeGreaterThan(labelWidth('tools'));
+	});
+});
+
+describe('countCrossings', () => {
+	const route = (...points: [number, number][]) => points.map(([x, y]) => ({ x, y }));
+
+	it('counts routes that cross', () => {
+		expect(countCrossings([route([0, 5], [10, 5]), route([5, 0], [5, 10])])).toBe(1);
+	});
+
+	it('counts every crossing of a route that bends back', () => {
+		expect(
+			countCrossings([route([0, 5], [10, 5]), route([2, 0], [2, 10], [8, 10], [8, 0])]),
+		).toBe(2);
+	});
+
+	it('does not count routes that only touch, or run side by side', () => {
+		expect(
+			countCrossings([route([0, 0], [10, 0]), route([10, 0], [10, 10]), route([0, 2], [10, 2])]),
+		).toBe(0);
 	});
 });
 
@@ -58,6 +78,21 @@ describe('layoutGraph', () => {
 	it('leaves out a link to a repository that is not in the graph', async () => {
 		const { links } = await layoutGraph([node('app')], [link('app', 'gone')]);
 		expect(links).toEqual([]);
+	});
+
+	it('keeps the seed with the fewest crossings', async () => {
+		// Irregular and dense enough for the result to depend on the seed.
+		const names = Array.from({ length: 24 }, (_, index) => `n${index}`);
+		const links = names.flatMap((from, i) =>
+			names.flatMap((to, j) =>
+				j > i && Math.imul(i * 31 + j, 2654435761) >>> 28 < 3 ? [link(from, to)] : [],
+			),
+		);
+		const crossings = async (seeds: number) => {
+			const result = await layoutGraph(names.map(node), links, seeds);
+			return countCrossings(result.links.map((entry) => entry.points));
+		};
+		expect(await crossings(30)).toBeLessThan(await crossings(1));
 	});
 
 	it('comes out the same every time, so a rebuild does not move anything', async () => {

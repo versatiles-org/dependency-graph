@@ -87,6 +87,39 @@ function round(value: number): number {
 }
 
 /**
+ * How many layouts to try. ELK's crossing reduction is a heuristic, and on this
+ * graph its result ranges from 76 to 145 crossings depending on the random seed
+ * alone. One layout takes about 35ms, so this costs seconds, at build time only.
+ */
+const LAYOUT_SEEDS = 100;
+
+/** Whether the interiors of two segments meet in a single point. */
+function segmentsCross(a: Point, b: Point, c: Point, d: Point): boolean {
+	const denominator = (b.x - a.x) * (d.y - c.y) - (b.y - a.y) * (d.x - c.x);
+	if (denominator === 0) return false;
+	const t = ((c.x - a.x) * (d.y - c.y) - (c.y - a.y) * (d.x - c.x)) / denominator;
+	const u = ((c.x - a.x) * (b.y - a.y) - (c.y - a.y) * (b.x - a.x)) / denominator;
+	return t > 0 && t < 1 && u > 0 && u < 1;
+}
+
+/** How often the given routes cross each other. */
+export function countCrossings(routes: Point[][]): number {
+	let crossings = 0;
+	for (let i = 0; i < routes.length; i++) {
+		for (let j = i + 1; j < routes.length; j++) {
+			for (let s = 1; s < routes[i].length; s++) {
+				for (let t = 1; t < routes[j].length; t++) {
+					if (segmentsCross(routes[i][s - 1], routes[i][s], routes[j][t - 1], routes[j][t])) {
+						crossings++;
+					}
+				}
+			}
+		}
+	}
+	return crossings;
+}
+
+/**
  * Lays the graph out with ELK's layered algorithm.
  *
  * It ranks the repositories so every dependency points the same way, orders
@@ -99,10 +132,15 @@ function round(value: number): number {
  * The links arrive free of cycles as long as the data has none: the release
  * triggers that used to close them are already turned around. Should a real
  * cycle appear, ELK breaks it by drawing an arrow of its choice backward.
+ *
+ * It tries a fixed list of random seeds and keeps the layout with the fewest
+ * crossings, the lowest seed winning a tie, so the same data always gives the
+ * same picture. Changed data can make another seed win and rearrange the graph.
  */
 export async function layoutGraph<Node extends { name: string }>(
 	nodes: Node[],
 	links: DependencyLink[],
+	seeds = LAYOUT_SEEDS,
 ): Promise<{
 	nodes: (Node & Box)[];
 	links: (DependencyLink & { points: Point[] })[];
@@ -110,9 +148,10 @@ export async function layoutGraph<Node extends { name: string }>(
 	const names = new Set(nodes.map((node) => node.name));
 	const drawable = links.filter((link) => names.has(link.from) && names.has(link.to));
 
-	const graph: ElkNode = {
+	const graphWithSeed = (seed: number): ElkNode => ({
 		id: 'root',
 		layoutOptions: {
+			'elk.randomSeed': String(seed),
 			'elk.algorithm': 'layered',
 			'elk.direction': 'RIGHT',
 			'elk.edgeRouting': 'ORTHOGONAL',
@@ -145,12 +184,36 @@ export async function layoutGraph<Node extends { name: string }>(
 				'elk.layered.priority.direction': String(EDGE_KIND_META[link.kinds[0]].weight),
 			},
 		})),
-	};
+	});
 
-	const laid = await new ELK().layout(graph);
+	const elk = new ELK();
+	let best: { placed: ElkNode; routes: Map<number, Point[]>; crossings: number } | undefined;
+	for (let seed = 1; seed <= seeds; seed++) {
+		const laid = await elk.layout(graphWithSeed(seed));
+
+		const routes = new Map<number, Point[]>();
+		for (const edge of laid.edges ?? []) {
+			const section = edge.sections?.[0];
+			if (!section) continue;
+			routes.set(
+				Number(edge.id),
+				[section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(
+					({ x, y }) => ({
+						x: round(x),
+						y: round(y),
+					}),
+				),
+			);
+		}
+
+		const crossings = countCrossings([...routes.values()]);
+		if (!best || crossings < best.crossings) best = { placed: laid, routes, crossings };
+	}
+	if (!best) throw new Error('the layout needs at least one seed');
+	const { routes } = best;
 
 	const placed = new Map<string, Box>();
-	for (const child of laid.children ?? []) {
+	for (const child of best.placed.children ?? []) {
 		const w = child.width ?? 0;
 		const h = child.height ?? 0;
 		// ELK reports the top-left corner; everything else works from centres.
@@ -160,19 +223,6 @@ export async function layoutGraph<Node extends { name: string }>(
 			w,
 			h,
 		});
-	}
-
-	const routes = new Map<number, Point[]>();
-	for (const edge of laid.edges ?? []) {
-		const section = edge.sections?.[0];
-		if (!section) continue;
-		routes.set(
-			Number(edge.id),
-			[section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(({ x, y }) => ({
-				x: round(x),
-				y: round(y),
-			})),
-		);
 	}
 
 	return {
