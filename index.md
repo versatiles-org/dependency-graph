@@ -94,6 +94,7 @@ What surrounds the software — documentation, the websites, the public tile and
 | [maputnik](https://github.com/versatiles-org/maputnik)                                 | An open source visual editor for the 'MapLibre Style Specification'                           | 0          | 0       |
 | [playground](https://github.com/versatiles-org/playground)                             | Interactive playground demonstrating how to use VersaTiles in web applications.               | 2          | 1       |
 | [shortbread-docs](https://github.com/versatiles-org/shortbread-docs)                   | Documentation of the Shortbread vector tile schema                                            | 0          | 0       |
+| [showcases](https://github.com/versatiles-org/showcases)                               | Gallery of projects using VersaTiles                                                          | 0          | 1       |
 | [tiles.versatiles.org](https://github.com/versatiles-org/tiles.versatiles.org)         | Tile hosting service for public VersaTiles datasets.                                          | 3          | 0       |
 | [tools](https://github.com/versatiles-org/tools)                                       | Utility scripts and helper tools built around the VersaTiles ecosystem.                       | 5          | 1       |
 | [versatiles-docker](https://github.com/versatiles-org/versatiles-docker)               | Docker images and build scripts for the VersaTiles ecosystem.                                 | 3          | 5       |
@@ -108,14 +109,6 @@ Housekeeping for the maintainers. Nothing here is needed to use VersaTiles.
 | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- | ---------- | ------- |
 | [dependency-graph](https://github.com/versatiles-org/dependency-graph)   | —                                                                                   | 0          | 0       |
 | [node-release-tool](https://github.com/versatiles-org/node-release-tool) | Helper tool for automating Node.js package releases across VersaTiles repositories. | 0          | 15      |
-
-### Not yet categorised
-
-Added to the organisation since this page was last curated.
-
-| Repository                                               | Description                          | Depends on | Used by |
-| -------------------------------------------------------- | ------------------------------------ | ---------- | ------- |
-| [showcases](https://github.com/versatiles-org/showcases) | Gallery of projects using VersaTiles | 0          | 1       |
 
 ## How each link is declared
 
