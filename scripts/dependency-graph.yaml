@@ -100,6 +100,7 @@ repositories:
   'versatiles-documentation': [ecosystem]
   'versatiles-org.github.io': [ecosystem]
 
+  'dependency-graph': [internal]
   'node-release-tool': [internal]
 
 # Container images published by the project, and the repository that builds

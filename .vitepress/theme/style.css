@@ -1,0 +1,79 @@
+/**
+ * VersaTiles brand palette
+ * https://github.com/vuejs/vitepress/blob/main/src/client/theme-default/styles/vars.css
+ *
+ * Everything below is derived from four seed colors. Shades are produced with
+ * the relative `oklch(from …)` syntax, which keeps the chroma and hue of the
+ * seed and only moves its lightness — so a seed can be re-tuned in one place
+ * and the whole ramp follows.
+ *
+ * Lightness is the accessibility knob: it maps almost directly to contrast.
+ * The values below are picked so that text clears WCAG AA (4.5:1) against the
+ * background it actually lands on; the measured ratios are noted per line.
+ * Only those numbers differ between light and dark mode — see `.dark`.
+ *
+ * Anything VitePress already gets right (grays, warning, danger, the custom
+ * block layout) is intentionally not repeated here.
+ * -------------------------------------------------------------------------- */
+
+:root {
+	--vt-purple: #a15fde;
+	--vt-magenta: #a036aa;
+	--vt-lime: #b2c448;
+	--vt-green: #005034;
+
+	/* Lightness of the purple used for links and accents ... */
+	--vt-l-accent: 0.52; /* 6.1:1 on white */
+	/* ... of the magenta it shifts to on hover ... */
+	--vt-l-accent-hover: 0.45;
+	/* ... and the opacity of the purple tint behind tip blocks and badges.
+	   This one must stay translucent: text is rendered on top of it. */
+	--vt-a-tint: 14%;
+
+	--vp-c-brand-1: oklch(from var(--vt-purple) var(--vt-l-accent) c h);
+	--vp-c-brand-2: oklch(from var(--vt-magenta) var(--vt-l-accent-hover) c h);
+	--vp-c-brand-3: var(--vt-lime);
+	--vp-c-brand-soft: oklch(from var(--vt-purple) l c h / var(--vt-a-tint));
+}
+
+/* On a dark background the ramp has to move the other way, so the three
+   numbers flip and every derived color follows. */
+.dark {
+	--vt-l-accent: 0.76; /* 7.7:1 on the dark page background */
+	--vt-l-accent-hover: 0.85;
+	--vt-a-tint: 22%;
+}
+
+/**
+ * Component: Button
+ * -------------------------------------------------------------------------- */
+
+/* The lime is far too light to carry white text (1.9:1), so the idle button
+   takes dark text instead. Hover and active go to purple, and their lightness
+   is pinned rather than themed: white text sits on them in both modes. */
+:root {
+	--vp-button-brand-text: var(--vp-c-black);
+	--vp-button-brand-hover-bg: oklch(from var(--vt-magenta) 0.53 c h); /* 5.8:1 */
+	--vp-button-brand-active-bg: oklch(from var(--vt-purple) 0.5 c h); /* 6.6:1 */
+}
+
+/**
+ * Component: Algolia
+ * -------------------------------------------------------------------------- */
+
+.DocSearch {
+	--docsearch-primary-color: var(--vp-c-brand-1) !important;
+}
+
+/**
+ * Component: Nav bar
+ * -------------------------------------------------------------------------- */
+
+/* Decorative brand ramp across the bottom border. Hand-picked stops rather
+   than derived ones: the violet is far more vivid than the seed purple, and
+   deriving it at seed chroma visibly dulls the whole gradient. */
+.VPNavBar {
+	border-style: solid;
+	border-width: 0 0 1px;
+	border-image: linear-gradient(60deg, #6b0075, #9d35ff 40%, #93a813 65%, var(--vt-green)) 0.5;
+}

@@ -1,5 +1,5 @@
 /**
- * Builds the "Repository dependencies" compendium page.
+ * Builds the "Repository dependencies" page.
  *
  * The VersaTiles repositories depend on each other in half a dozen different
  * ways — npm packages, Rust crates, Docker base images, release assets pulled
@@ -33,7 +33,7 @@ import { renderJson, renderPage } from './dependency-graph/render';
 import { sortEdges, type Graph, type RepoNode } from './dependency-graph/model';
 
 const ROOT = resolve(__dirname, '..');
-const TARGET_PAGE = 'compendium/dependency_graph.md';
+const TARGET_PAGE = 'index.md';
 const TARGET_DATA = 'public/dependency-graph.json';
 
 /** Repositories the configuration says nothing about still have to go somewhere. */

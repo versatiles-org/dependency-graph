@@ -70,7 +70,7 @@ export function renderPage({ graph, branches, skipped }: RenderOptions): string 
 		'> [!NOTE]',
 		'> This page is generated from the public repositories of the',
 		`> [${org}](https://github.com/${org}) organisation. To correct or extend it, change`,
-		`> [\`${CONFIG_PATH}\`](https://github.com/${org}/versatiles-documentation/blob/main/${CONFIG_PATH})`,
+		`> [\`${CONFIG_PATH}\`](https://github.com/${org}/dependency-graph/blob/main/${CONFIG_PATH})`,
 		'> or the repository it describes — edits made here are overwritten.',
 		'',
 		'VersaTiles is not one program but a few dozen repositories that build on each other:',
@@ -181,13 +181,13 @@ export function renderPage({ graph, branches, skipped }: RenderOptions): string 
 		'',
 		'Every arrow therefore has a file and a line behind it, listed in the tables above and',
 		'available as machine-readable data in',
-		// Linked at its place in the repository rather than at `/dependency-graph.json`:
+		// Linked at its place in the repository rather than at its published URL:
 		// the site serves `public/` from the root, so the published path is right for a
 		// reader but resolves to nothing on disk, which is what link checking works on.
-		`[\`${DATA_NAME}\`](https://github.com/${org}/versatiles-documentation/blob/main/${DATA_PATH}),`,
-		'published alongside this page as `/dependency-graph.json`. What no parser can see —',
+		`[\`${DATA_NAME}\`](https://github.com/${org}/dependency-graph/blob/main/${DATA_PATH}),`,
+		'published alongside this page as `/dependency-graph/dependency-graph.json`. What no parser can see —',
 		'operational dependencies, for instance — is declared by hand in',
-		`[\`${CONFIG_PATH}\`](https://github.com/${org}/versatiles-documentation/blob/main/${CONFIG_PATH}),`,
+		`[\`${CONFIG_PATH}\`](https://github.com/${org}/dependency-graph/blob/main/${CONFIG_PATH}),`,
 		'which is also where false positives are filtered out and repositories are assigned to',
 		'the categories above.',
 		'',

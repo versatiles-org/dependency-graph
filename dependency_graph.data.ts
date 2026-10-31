@@ -16,8 +16,8 @@ import { readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { defineLoader } from 'vitepress';
-import { EDGE_KINDS, EDGE_KIND_META } from '../scripts/dependency-graph/model';
-import type { EdgeKind, EdgeLineStyle, Graph, TagInfo } from '../scripts/dependency-graph/model';
+import { EDGE_KINDS, EDGE_KIND_META } from './scripts/dependency-graph/model';
+import type { EdgeKind, EdgeLineStyle, Graph, TagInfo } from './scripts/dependency-graph/model';
 
 export interface GraphKind {
 	id: EdgeKind;
@@ -52,11 +52,11 @@ declare const data: GraphData;
 export { data };
 
 export default defineLoader({
-	watch: ['../public/dependency-graph.json'],
+	watch: ['./public/dependency-graph.json'],
 	load(): GraphData {
 		const here = dirname(fileURLToPath(import.meta.url));
 		const graph = JSON.parse(
-			readFileSync(resolve(here, '../public/dependency-graph.json'), 'utf8'),
+			readFileSync(resolve(here, './public/dependency-graph.json'), 'utf8'),
 		) as Graph;
 
 		// Several files can prove the same relation; the diagram draws it once.

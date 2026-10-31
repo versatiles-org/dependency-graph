@@ -1,0 +1,67 @@
+{
+  "name": "versatiles-dependency-graph",
+  "version": "1.0.0",
+  "private": true,
+  "description": "How the VersaTiles repositories build on each other",
+  "homepage": "https://versatiles.org/dependency-graph/",
+  "bugs": {
+    "url": "https://github.com/versatiles-org/dependency-graph/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/versatiles-org/dependency-graph.git"
+  },
+  "scripts": {
+    "build": "vitepress build .",
+    "sync:deps": "tsx scripts/build-dependency-graph.ts",
+    "deps:drift": "tsx scripts/build-dependency-graph.ts --drift",
+    "test": "vitest run",
+    "check": "npm run format && npm run lint && npm run lint:types && npm run test && npm run build",
+    "dev": "vitepress dev .",
+    "format": "prettier --log-level warn --write .",
+    "format:check": "prettier --log-level warn --check .",
+    "lint": "eslint .",
+    "lint:types": "vue-tsc --noEmit",
+    "preview": "vitepress preview .",
+    "upgrade": "npm-check-updates -u --peer && npm i"
+  },
+  "license": "Unlicense",
+  "type": "commonjs",
+  "overrides": {
+    "vite": ">=7.3.2 <8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/d3-selection": "^3.0.12",
+    "@types/d3-zoom": "^3.0.9",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^26.6.5",
+    "@types/semver": "^7.8.0",
+    "d3-selection": "^3.0.0",
+    "d3-zoom": "^3.0.0",
+    "elkjs": "^0.12.0",
+    "esbuild": "0.28.2",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-vue": "^10.11.1",
+    "globals": "^17.13.0",
+    "js-yaml": "^5.5.0",
+    "npm-check-updates": "^23.1.1",
+    "prettier": "^3.9.10",
+    "semver": "^7.8.5",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.0",
+    "vitepress": "^1.6.4",
+    "vitest": "^5.0.5",
+    "vue-eslint-parser": "^10.4.1",
+    "vue-tsc": "^3.3.13"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "fsevents": true
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

@@ -29,6 +29,11 @@
 			"id": "internal",
 			"title": "Internal helpers",
 			"summary": "Housekeeping for the maintainers. Nothing here is needed to use VersaTiles."
+		},
+		{
+			"id": "uncategorised",
+			"title": "Not yet categorised",
+			"summary": "Added to the organisation since this page was last curated."
 		}
 	],
 	"repos": [
@@ -206,6 +211,14 @@
 			"description": "Tilemaker configuration for generating Shortbread vector tiles.",
 			"language": "Lua",
 			"fork": true,
+			"archived": false
+		},
+		{
+			"name": "showcases",
+			"tags": ["uncategorised"],
+			"description": "Gallery of projects using VersaTiles",
+			"language": "TypeScript",
+			"fork": false,
 			"archived": false
 		},
 		{
@@ -430,7 +443,7 @@
 			"from": "maplibre-versatiles-styler",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^7.0.1",
+			"detail": "@versatiles/style@^7.1.0",
 			"path": "package.json",
 			"line": 55
 		},
@@ -448,7 +461,7 @@
 			"kind": "download",
 			"detail": "github.com/versatiles-org/versatiles-spec/blob",
 			"path": "src/index.ts",
-			"line": 162
+			"line": 165
 		},
 		{
 			"from": "node-versatiles-container",
@@ -456,7 +469,7 @@
 			"kind": "download",
 			"detail": "github.com/versatiles-org/versatiles-spec/blob",
 			"path": "src/lib/interfaces.ts",
-			"line": 72
+			"line": 73
 		},
 		{
 			"from": "node-versatiles-google-cloud",
@@ -470,7 +483,7 @@
 			"from": "node-versatiles-google-cloud",
 			"to": "node-versatiles-container",
 			"kind": "npm",
-			"detail": "@versatiles/container@^2.0.2",
+			"detail": "@versatiles/container@^2.1.0",
 			"path": "package.json",
 			"line": 63
 		},
@@ -488,15 +501,15 @@
 			"kind": "npm",
 			"detail": "@versatiles/release-tool@^2.20.0",
 			"path": "package.json",
-			"line": 71
+			"line": 72
 		},
 		{
 			"from": "node-versatiles-server",
 			"to": "node-versatiles-container",
 			"kind": "npm",
-			"detail": "@versatiles/container@^2.0.2",
+			"detail": "@versatiles/container@^2.1.0",
 			"path": "package.json",
-			"line": 63
+			"line": 64
 		},
 		{
 			"from": "node-versatiles-server",
@@ -512,7 +525,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/style@^7.0.1",
 			"path": "package.json",
-			"line": 64
+			"line": 65
 		},
 		{
 			"from": "node-versatiles-svelte",
@@ -561,6 +574,14 @@
 			"detail": "github.com/versatiles-org/versatiles-frontend/releases",
 			"path": "src/server/frontend.ts",
 			"line": 25
+		},
+		{
+			"from": "orthophotos",
+			"to": "versatiles-style",
+			"kind": "npm",
+			"detail": "@versatiles/style@^7.0.1",
+			"path": "package.json",
+			"line": 37
 		},
 		{
 			"from": "planetiler-shortbread",
@@ -748,14 +769,6 @@
 		},
 		{
 			"from": "versatiles-fonts",
-			"to": "versatiles-frontend",
-			"kind": "workflow",
-			"detail": "gh workflow run --repo versatiles-org/versatiles-frontend",
-			"path": ".github/workflows/release.yml",
-			"line": 61
-		},
-		{
-			"from": "versatiles-fonts",
 			"to": "versatiles-glyphs-rs",
 			"kind": "download",
 			"detail": "github.com/versatiles-org/versatiles-glyphs-rs/raw",
@@ -814,9 +827,9 @@
 			"from": "versatiles-frontend",
 			"to": "versatiles-docker",
 			"kind": "workflow",
-			"detail": "api.github.com/repos/versatiles-org/versatiles-docker/actions/workflows/release.yml/dispatches",
+			"detail": "gh workflow run --repo versatiles-org/versatiles-docker",
 			"path": ".github/workflows/release.yml",
-			"line": 74
+			"line": 86
 		},
 		{
 			"from": "versatiles-frontend",
@@ -856,15 +869,23 @@
 			"kind": "workflow",
 			"detail": "gh workflow run --repo versatiles-org/homebrew-versatiles",
 			"path": ".github/workflows/release.yml",
-			"line": 114
+			"line": 125
+		},
+		{
+			"from": "versatiles-map-animator",
+			"to": "node-release-tool",
+			"kind": "npm",
+			"detail": "@versatiles/release-tool@^2.20.0",
+			"path": "package.json",
+			"line": 43
 		},
 		{
 			"from": "versatiles-map-animator",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^7.0.1",
+			"detail": "@versatiles/style@^7.1.0",
 			"path": "package.json",
-			"line": 42
+			"line": 44
 		},
 		{
 			"from": "versatiles-map-editor",
@@ -896,7 +917,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/release-tool@^2.20.0",
 			"path": "package.json",
-			"line": 25
+			"line": 26
 		},
 		{
 			"from": "versatiles-org.github.io",
@@ -904,7 +925,15 @@
 			"kind": "workflow",
 			"detail": "gh workflow run --repo versatiles-org/playground",
 			"path": ".github/workflows/gh-release.yml",
-			"line": 119
+			"line": 145
+		},
+		{
+			"from": "versatiles-org.github.io",
+			"to": "showcases",
+			"kind": "workflow",
+			"detail": "gh workflow run --repo versatiles-org/showcases",
+			"path": ".github/workflows/gh-release.yml",
+			"line": 165
 		},
 		{
 			"from": "versatiles-org.github.io",
@@ -912,7 +941,7 @@
 			"kind": "workflow",
 			"detail": "gh workflow run --repo versatiles-org/tools",
 			"path": ".github/workflows/gh-release.yml",
-			"line": 108
+			"line": 125
 		},
 		{
 			"from": "versatiles-rs",
@@ -920,7 +949,7 @@
 			"kind": "workflow",
 			"detail": "gh workflow run --repo versatiles-org/homebrew-versatiles",
 			"path": ".github/workflows/release.yml",
-			"line": 1139
+			"line": 1156
 		},
 		{
 			"from": "versatiles-rs",
@@ -928,7 +957,7 @@
 			"kind": "workflow",
 			"detail": "gh workflow run --repo versatiles-org/versatiles-docker",
 			"path": ".github/workflows/release.yml",
-			"line": 1131
+			"line": 1146
 		},
 		{
 			"from": "versatiles-studio",
@@ -936,7 +965,7 @@
 			"kind": "workflow",
 			"detail": "gh workflow run --repo versatiles-org/homebrew-versatiles",
 			"path": ".github/workflows/release.yml",
-			"line": 453
+			"line": 465
 		},
 		{
 			"from": "versatiles-studio",
@@ -944,7 +973,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/release-tool@^2.20.0",
 			"path": "package.json",
-			"line": 56
+			"line": 57
 		},
 		{
 			"from": "versatiles-studio",
@@ -968,7 +997,7 @@
 			"kind": "cargo",
 			"detail": "versatiles",
 			"path": "Cargo.toml",
-			"line": 24
+			"line": 26
 		},
 		{
 			"from": "versatiles-studio",
@@ -976,7 +1005,7 @@
 			"kind": "cargo",
 			"detail": "versatiles_container",
 			"path": "Cargo.toml",
-			"line": 18
+			"line": 19
 		},
 		{
 			"from": "versatiles-studio",
@@ -984,7 +1013,7 @@
 			"kind": "cargo",
 			"detail": "versatiles_core",
 			"path": "Cargo.toml",
-			"line": 17
+			"line": 18
 		},
 		{
 			"from": "versatiles-studio",
@@ -992,7 +1021,7 @@
 			"kind": "cargo",
 			"detail": "versatiles_geometry",
 			"path": "Cargo.toml",
-			"line": 20
+			"line": 21
 		},
 		{
 			"from": "versatiles-studio",
@@ -1000,7 +1029,7 @@
 			"kind": "cargo",
 			"detail": "versatiles_image",
 			"path": "Cargo.toml",
-			"line": 21
+			"line": 22
 		},
 		{
 			"from": "versatiles-studio",
@@ -1008,7 +1037,7 @@
 			"kind": "cargo",
 			"detail": "versatiles_pipeline",
 			"path": "Cargo.toml",
-			"line": 19
+			"line": 20
 		},
 		{
 			"from": "versatiles-studio",
@@ -1022,9 +1051,9 @@
 			"from": "versatiles-studio",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^7.0.1",
+			"detail": "@versatiles/style@^7.1.0",
 			"path": "package.json",
-			"line": 87
+			"line": 88
 		},
 		{
 			"from": "versatiles-style",

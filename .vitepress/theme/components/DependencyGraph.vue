@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue';
 import { select } from 'd3-selection';
 import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
-import { data, type GraphLink, type GraphNode } from '../../../compendium/dependency_graph.data';
+import { data, type GraphLink, type GraphNode } from '../../../dependency_graph.data';
 
 /** The relation kinds the generator defines, without importing them twice. */
 type EdgeKind = GraphLink['kind'];

@@ -117,7 +117,7 @@ export class GitHub {
 		}
 		this.headers = {
 			accept: 'application/vnd.github+json',
-			'user-agent': 'versatiles-documentation/dependency-graph',
+			'user-agent': 'versatiles-org/dependency-graph',
 			...(token ? { authorization: `Bearer ${token}` } : {}),
 		};
 		this.cacheDir = options.cache
