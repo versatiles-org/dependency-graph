@@ -29,11 +29,6 @@
 			"id": "internal",
 			"title": "Internal helpers",
 			"summary": "Housekeeping for the maintainers. Nothing here is needed to use VersaTiles."
-		},
-		{
-			"id": "uncategorised",
-			"title": "Not yet categorised",
-			"summary": "Added to the organisation since this page was last curated."
 		}
 	],
 	"repos": [
@@ -223,7 +218,7 @@
 		},
 		{
 			"name": "showcases",
-			"tags": ["uncategorised"],
+			"tags": ["ecosystem"],
 			"description": "Gallery of projects using VersaTiles",
 			"language": "TypeScript",
 			"fork": false,

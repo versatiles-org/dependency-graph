@@ -94,6 +94,7 @@ repositories:
   'maputnik': [ecosystem]
   'playground': [ecosystem]
   'shortbread-docs': [ecosystem]
+  'showcases': [ecosystem]
   'tiles.versatiles.org': [ecosystem]
   'tools': [ecosystem]
   'versatiles-docker': [ecosystem]
