@@ -46,9 +46,9 @@ const kindLine = new Map(data.kinds.map((kind) => [kind.id, kind.line]));
 
 /**
  * How a link is drawn, as inline values rather than a class per kind. Opacity
- * goes in as a custom property instead of the property itself, so that dimming
- * and hiding can multiply into it rather than being overridden by it — and so
- * that it lands on the element as a whole, arrowhead included.
+ * goes in as a custom property instead of the property itself, so that the
+ * dimming rules can replace it, and so that it lands on the element as a whole,
+ * arrowhead included.
  */
 function lineStyle(kind: EdgeKind): Record<string, string> {
 	const line = kindLine.get(kind);
@@ -830,19 +830,17 @@ onBeforeUnmount(() => {
 	font-size: 12px;
 }
 
-/* Before the hover rules, so that isolating a repository dims these further. */
+/* One floor for everything set back, by a filter or by hovering a repository. */
+.node.filtered,
+.link.filtered,
+.node.dimmed,
+.link.dimmed {
+	opacity: 0.1;
+}
+
 .node.filtered,
 .link.filtered {
-	opacity: 0.1;
 	pointer-events: none;
-}
-
-.node.dimmed {
-	opacity: 0.12;
-}
-
-.link.dimmed {
-	opacity: calc(var(--dg-link-opacity, 1) * 0.12);
 }
 
 /* Links ------------------------------------------------------------------ */
