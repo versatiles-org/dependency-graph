@@ -88,10 +88,36 @@ function round(value: number): number {
 
 /**
  * How many layouts to try. ELK's crossing reduction is a heuristic, and on this
- * graph its result ranges from 76 to 145 crossings depending on the random seed
- * alone. One layout takes about 35ms, so this costs seconds, at build time only.
+ * graph the worst seed has about twice the crossings of the best. One layout
+ * takes about 35ms, so this costs seconds, at build time only.
  */
 const LAYOUT_SEEDS = 100;
+
+/**
+ * Repositories nearly everything links to, without that saying much about how
+ * the others relate. Their arrows give way to the rest, which lets the rest
+ * arrange themselves almost as if these were not there. They cross more in
+ * return, but they start out dimmed, so the first view gains.
+ */
+const BACKGROUND_TARGETS = new Set(['node-release-tool']);
+
+/** How much an arrow counts when ELK assigns columns and places repositories. */
+export function edgePriorities(link: DependencyLink): Record<string, string> {
+	if (BACKGROUND_TARGETS.has(link.to)) {
+		return {
+			'elk.layered.priority.direction': '0',
+			'elk.layered.priority.shortness': '0',
+			'elk.layered.priority.straightness': '0',
+		};
+	}
+	return {
+		// Should a real cycle appear, a build-time dependency is worth pointing the
+		// right way more than a CI trigger is, so the kind weights carry over.
+		'elk.layered.priority.direction': String(EDGE_KIND_META[link.kinds[0]].weight),
+		'elk.layered.priority.shortness': '10',
+		'elk.layered.priority.straightness': '10',
+	};
+}
 
 /** Whether the interiors of two segments meet in a single point. */
 function segmentsCross(a: Point, b: Point, c: Point, d: Point): boolean {
@@ -178,11 +204,7 @@ export async function layoutGraph<Node extends { name: string }>(
 			id: String(index),
 			sources: [link.from],
 			targets: [link.to],
-			// A build-time dependency is worth keeping straight and pointing the
-			// right way more than a CI trigger is, so the kind weights carry over.
-			layoutOptions: {
-				'elk.layered.priority.direction': String(EDGE_KIND_META[link.kinds[0]].weight),
-			},
+			layoutOptions: edgePriorities(link),
 		})),
 	});
 

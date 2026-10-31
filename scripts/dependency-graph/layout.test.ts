@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countCrossings, labelWidth, layoutGraph } from './layout';
+import { countCrossings, edgePriorities, labelWidth, layoutGraph } from './layout';
 import type { DependencyLink } from './model';
 
 const node = (name: string) => ({ name });
@@ -33,6 +33,23 @@ describe('countCrossings', () => {
 		expect(
 			countCrossings([route([0, 0], [10, 0]), route([10, 0], [10, 10]), route([0, 2], [10, 2])]),
 		).toBe(0);
+	});
+});
+
+describe('edgePriorities', () => {
+	it('lets arrows to the release tool give way to all others', () => {
+		const tool = Object.values(edgePriorities(link('app', 'node-release-tool')));
+		const other = Object.values(edgePriorities(link('app', 'lib')));
+		expect(new Set(tool)).toEqual(new Set(['0']));
+		for (const value of other) expect(Number(value)).toBeGreaterThan(0);
+	});
+
+	it('ranks a build dependency above a CI trigger, should a cycle need breaking', () => {
+		const direction = (kind: DependencyLink['kinds'][number]) =>
+			Number(
+				edgePriorities({ from: 'a', to: 'b', kinds: [kind] })['elk.layered.priority.direction'],
+			);
+		expect(direction('npm')).toBeGreaterThan(direction('dispatch'));
 	});
 });
 
