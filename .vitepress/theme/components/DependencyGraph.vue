@@ -7,29 +7,18 @@ import { data, type GraphLink, type GraphNode } from '../../../dependency_graph.
 /** The relation kinds the generator defines, without importing them twice. */
 type EdgeKind = GraphLink['kinds'][number];
 
-interface Point {
-	x: number;
-	y: number;
-}
-
-interface Box extends GraphNode {
-	/** Label box, measured once from the rendered text. */
-	w: number;
-	h: number;
-}
+type Point = GraphLink['points'][number];
 
 interface Link {
-	source: Box;
-	target: Box;
+	source: GraphNode;
+	target: GraphNode;
 	/** Every kind behind this dependency, the most substantial first. */
 	kinds: EdgeKind[];
+	path: string;
 }
 
-/** Gap between layers, and between neighbours inside one. */
-const RANK_GAP = 90;
-const NODE_GAP = 26;
-
-const nodes: Box[] = data.nodes.map((node) => ({ ...node, w: 90, h: 22 }));
+/** Both come laid out: the build has already placed them. */
+const nodes: GraphNode[] = data.nodes;
 const byName = new Map(nodes.map((node) => [node.name, node]));
 
 const links: Link[] = (() => {
@@ -37,11 +26,10 @@ const links: Link[] = (() => {
 		const source = byName.get(link.from);
 		const target = byName.get(link.to);
 		if (!source || !target) return [];
-		return [{ source, target, kinds: link.kinds }];
+		return [{ source, target, kinds: link.kinds, path: pathOf(link.points) }];
 	});
 })();
 
-const kindWeight = new Map(data.kinds.map((kind) => [kind.id, kind.weight]));
 const kindLine = new Map(data.kinds.map((kind) => [kind.id, kind.line]));
 
 /**
@@ -127,128 +115,14 @@ const visible = computed(() => {
 	return { shown, links: activeLinks, nodes: nodes.filter((node) => shown.get(node.name)) };
 });
 
-/* --------------------------------------------------------------------------
- * Layout
- * ----------------------------------------------------------------------- */
-
-interface Layout {
-	nodes: Map<string, Point>;
-	/** Routed polylines, keyed by the link's index in `links`. */
-	edges: Map<number, Point[]>;
-}
-
-interface ElkGraph {
-	id: string;
-	layoutOptions?: Record<string, string>;
-	width?: number;
-	height?: number;
-	x?: number;
-	y?: number;
-	children?: ElkGraph[];
-	edges?: {
-		id: string;
-		sources: string[];
-		targets: string[];
-		layoutOptions?: Record<string, string>;
-		sections?: { startPoint: Point; endPoint: Point; bendPoints?: Point[] }[];
-	}[];
-}
-
-/**
- * Lays the graph out with ELK's layered algorithm.
- *
- * It ranks the repositories so every dependency points the same way, orders
- * each rank to cut down on crossings, and routes the edges orthogonally: an
- * edge leaves its source sideways, travels in a channel between the ranks, and
- * comes back in at its target. ELK also gives each edge its own place on a
- * node's border, which is what unpicks the fan of a dozen arrows arriving at
- * one hub — the thing dagre leaves stacked on a single corner.
- *
- * The links arrive free of cycles as long as the data has none: the release
- * triggers that used to close them are already turned around. Should a real
- * cycle appear, ELK breaks it by drawing an arrow of its choice backward.
- *
- * It runs once, over the whole graph, and filters never touch the result. elkjs
- * is a megabyte of layout engine, so only the page that draws the graph fetches it.
- */
-async function computeLayout(): Promise<Layout> {
-	// elkjs types its graph loosely; the shape used here is declared above.
-	const { default: Elk } = (await import('elkjs/lib/elk.bundled.js')) as unknown as {
-		default: new () => { layout: (graph: ElkGraph) => Promise<ElkGraph> };
-	};
-
-	const graph: ElkGraph = {
-		id: 'root',
-		layoutOptions: {
-			'elk.algorithm': 'layered',
-			'elk.direction': 'RIGHT',
-			'elk.edgeRouting': 'ORTHOGONAL',
-			'elk.layered.spacing.nodeNodeBetweenLayers': String(RANK_GAP),
-			'elk.spacing.nodeNode': String(NODE_GAP),
-			'elk.spacing.edgeEdge': '10',
-			'elk.spacing.edgeNode': '18',
-			'elk.layered.spacing.edgeEdgeBetweenLayers': '10',
-			'elk.layered.spacing.edgeNodeBetweenLayers': '18',
-			'elk.layered.cycleBreaking.strategy': 'GREEDY',
-			'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
-			'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-			// Repositories with nothing to connect to are laid out beside the rest
-			// rather than padding out the first rank.
-			'elk.separateConnectedComponents': 'true',
-			'elk.spacing.componentComponent': '40',
-		},
-		children: nodes.map((node) => ({
-			id: node.name,
-			width: node.w,
-			height: node.h,
-		})),
-		edges: links.map((link, index) => ({
-			id: String(index),
-			sources: [link.source.name],
-			targets: [link.target.name],
-			// A build-time dependency is worth keeping straight and pointing the
-			// right way more than a CI trigger is, so the kind weights carry over.
-			layoutOptions: {
-				'elk.layered.priority.direction': String(kindWeight.get(link.kinds[0]) ?? 1),
-			},
-		})),
-	};
-
-	const laid = await new Elk().layout(graph);
-
-	const placed = new Map<string, Point>();
-	for (const child of laid.children ?? []) {
-		// ELK reports the top-left corner; everything here works from centres.
-		placed.set(child.id, {
-			x: (child.x ?? 0) + (child.width ?? 0) / 2,
-			y: (child.y ?? 0) + (child.height ?? 0) / 2,
-		});
-	}
-
-	const routed = new Map<number, Point[]>();
-	for (const edge of laid.edges ?? []) {
-		const section = edge.sections?.[0];
-		if (!section) continue;
-		routed.set(Number(edge.id), [
-			section.startPoint,
-			...(section.bendPoints ?? []),
-			section.endPoint,
-		]);
-	}
-
-	return { nodes: placed, edges: routed };
-}
-
 const root = ref<HTMLElement>();
 const figure = ref<HTMLElement>();
 const svg = ref<SVGSVGElement>();
-const ruler = ref<SVGTextElement>();
-const ready = ref(false);
 const expanded = ref(false);
 const size = ref({ width: 960, height: 560 });
-const transform = shallowRef<ZoomTransform>(zoomIdentity);
+// Fitted from the start, so the server-rendered page already shows the graph.
+const transform = shallowRef<ZoomTransform>(fittedTransform());
 const hovered = ref<string | null>(null);
-const layout = shallowRef<Layout>({ nodes: new Map(), edges: new Map() });
 
 /* --------------------------------------------------------------------------
  * Camera
@@ -260,23 +134,18 @@ const layout = shallowRef<Layout>({ nodes: new Map(), edges: new Map() });
  */
 let userMoved = false;
 
-function fitView(): void {
-	const element = svg.value;
-	if (!element) return;
-
+function fittedTransform(): ZoomTransform {
 	let minX = Infinity;
 	let minY = Infinity;
 	let maxX = -Infinity;
 	let maxY = -Infinity;
 	for (const node of nodes) {
-		const at = layout.value.nodes.get(node.name);
-		if (!at) continue;
-		minX = Math.min(minX, at.x - node.w / 2);
-		maxX = Math.max(maxX, at.x + node.w / 2);
-		minY = Math.min(minY, at.y - node.h / 2);
-		maxY = Math.max(maxY, at.y + node.h / 2);
+		minX = Math.min(minX, node.x - node.w / 2);
+		maxX = Math.max(maxX, node.x + node.w / 2);
+		minY = Math.min(minY, node.y - node.h / 2);
+		maxY = Math.max(maxY, node.y + node.h / 2);
 	}
-	if (!Number.isFinite(minX)) return;
+	if (!Number.isFinite(minX)) return zoomIdentity;
 
 	const padding = 24;
 	const { width, height } = size.value;
@@ -285,10 +154,16 @@ function fitView(): void {
 		Math.max(0.2, (width - padding * 2) / Math.max(maxX - minX, 1)),
 		Math.max(0.2, (height - padding * 2) / Math.max(maxY - minY, 1)),
 	);
-	const next = zoomIdentity
+	return zoomIdentity
 		.translate(width / 2 - ((minX + maxX) / 2) * scale, height / 2 - ((minY + maxY) / 2) * scale)
 		.scale(scale);
+}
 
+function fitView(): void {
+	const element = svg.value;
+	if (!element) return;
+
+	const next = fittedTransform();
 	transform.value = next;
 	// Keep d3-zoom's own state in step, or the next pan would jump.
 	zoomBehaviour.transform(select(element), next);
@@ -373,14 +248,12 @@ const view = computed(() => {
 	return {
 		nodes: nodes.map((node) => ({
 			node,
-			at: layout.value.nodes.get(node.name) ?? { x: 0, y: 0 },
 			filtered: !shownNodes.get(node.name),
 			dimmed: active !== null && !neighbours.has(node.name),
 		})),
-		links: links.map((link, index) => ({
+		links: links.map((link) => ({
 			link,
 			kind: drawnKind(link),
-			path: pathOf(layout.value.edges.get(index) ?? []),
 			filtered: !activeLinks.has(link),
 			dimmed: active !== null && link.source.name !== active && link.target.name !== active,
 		})),
@@ -431,7 +304,7 @@ function pathOf(points: Point[]): string {
 }
 
 /** Native tooltip: what the repository is, and where it sits in the project. */
-function describe(node: Box): string {
+function describe(node: GraphNode): string {
 	const tags = node.tags.map((tag) => tagTitles.get(tag) ?? tag).join(', ');
 	return `${node.name} — ${tags}${node.description ? `. ${node.description}` : ''}`;
 }
@@ -446,19 +319,6 @@ function describeLink(link: Link): string {
 		? `. ${link.target.name} starts a build of ${link.source.name}`
 		: '';
 	return `${link.source.name} depends on ${link.target.name} — ${kinds}${dispatch}`;
-}
-
-/** Reads the real width of every label, so boxes and ranks match the text. */
-function measure(): void {
-	const element = ruler.value;
-	if (!element) return;
-	for (const node of nodes) {
-		element.textContent = node.name;
-		const box = element.getBBox();
-		node.w = Math.round(box.width) + 16;
-		node.h = Math.round(box.height) + 10;
-	}
-	element.textContent = '';
 }
 
 /* --------------------------------------------------------------------------
@@ -486,13 +346,8 @@ onMounted(() => {
 	const box = element.getBoundingClientRect();
 	size.value = { width: Math.max(280, box.width), height: Math.max(280, box.height) };
 
-	measure();
 	if (svg.value) select(svg.value).call(zoomBehaviour);
-	void computeLayout().then((result) => {
-		layout.value = result;
-		fitView();
-		ready.value = true;
-	});
+	fitView();
 });
 
 onBeforeUnmount(() => {
@@ -593,20 +448,14 @@ onBeforeUnmount(() => {
 					</marker>
 				</defs>
 
-				<!-- Off-screen ruler, used once to measure the labels. -->
-				<text ref="ruler" class="label ruler" x="-9999" y="-9999" />
-
-				<g
-					v-if="ready"
-					:transform="`translate(${transform.x},${transform.y}) scale(${transform.k})`"
-				>
+				<g :transform="`translate(${transform.x},${transform.y}) scale(${transform.k})`">
 					<path
 						v-for="(edge, index) in view.links"
 						:key="index"
 						class="link"
 						:class="{ dimmed: edge.dimmed, filtered: edge.filtered }"
 						:style="lineStyle(edge.kind)"
-						:d="edge.path"
+						:d="edge.link.path"
 						:marker-end="`url(#dg-arrow-${edge.kind})`"
 					>
 						<title>{{ describeLink(edge.link) }}</title>
@@ -618,7 +467,7 @@ onBeforeUnmount(() => {
 						class="node"
 						:class="{ dimmed: entry.dimmed, filtered: entry.filtered }"
 						:style="tagStyles.get(primaryTag(entry.node))"
-						:transform="`translate(${entry.at.x},${entry.at.y})`"
+						:transform="`translate(${entry.node.x},${entry.node.y})`"
 						@pointerenter="hovered = entry.node.name"
 						@pointerleave="hovered = null"
 					>
@@ -634,8 +483,6 @@ onBeforeUnmount(() => {
 					</g>
 				</g>
 			</svg>
-
-			<p v-if="!ready" class="loading">Preparing the layout…</p>
 		</div>
 
 		<figcaption class="status">
@@ -797,15 +644,6 @@ onBeforeUnmount(() => {
 	cursor: grabbing;
 }
 
-.loading {
-	position: absolute;
-	inset: 0;
-	display: grid;
-	place-content: center;
-	margin: 0;
-	color: var(--vp-c-text-3);
-}
-
 /* Nodes ------------------------------------------------------------------ */
 
 .node {
@@ -824,10 +662,6 @@ onBeforeUnmount(() => {
 	text-anchor: middle;
 	pointer-events: none;
 	user-select: none;
-}
-
-.label.ruler {
-	font-size: 12px;
 }
 
 /* One floor for everything set back, by a filter or by hovering a repository. */

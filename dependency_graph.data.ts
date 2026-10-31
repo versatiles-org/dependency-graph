@@ -8,14 +8,15 @@
  * the diagram cannot disagree about what "download" means if neither of them
  * owns the word.
  *
- * Layering is deliberately not done here: it needs the label widths the
- * component measures in the browser.
+ * The layout is worked out here too, so the page ships finished coordinates and
+ * the browser never has to load the layout engine.
  */
 
 import { readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { defineLoader } from 'vitepress';
+import { layoutGraph, type Box, type Point } from './scripts/dependency-graph/layout';
 import { dependencyLinks, EDGE_KINDS, EDGE_KIND_META } from './scripts/dependency-graph/model';
 import type {
 	DependencyLink,
@@ -34,14 +35,17 @@ export interface GraphKind {
 	line: EdgeLineStyle;
 }
 
-export interface GraphNode {
+export interface GraphNode extends Box {
 	name: string;
 	/** Most characteristic first; the first entry decides the colour. */
 	tags: string[];
 	description: string | null;
 }
 
-export type GraphLink = DependencyLink;
+export interface GraphLink extends DependencyLink {
+	/** The routed line, from the source's border to the target's. */
+	points: Point[];
+}
 
 export interface GraphData {
 	tags: TagInfo[];
@@ -55,11 +59,21 @@ export { data };
 
 export default defineLoader({
 	watch: ['./public/dependency-graph.json'],
-	load(): GraphData {
+	async load(): Promise<GraphData> {
 		const here = dirname(fileURLToPath(import.meta.url));
 		const graph = JSON.parse(
 			readFileSync(resolve(here, './public/dependency-graph.json'), 'utf8'),
 		) as Graph;
+
+		const { nodes, links } = await layoutGraph(
+			graph.repos.map((repo) => ({
+				name: repo.name,
+				tags: repo.tags,
+				description: repo.description,
+			})),
+			// Several files can prove the same dependency; the diagram draws it once.
+			dependencyLinks(graph.edges),
+		);
 
 		return {
 			tags: graph.tags,
@@ -69,13 +83,8 @@ export default defineLoader({
 				weight: EDGE_KIND_META[kind].weight,
 				line: EDGE_KIND_META[kind].line,
 			})),
-			nodes: graph.repos.map((repo) => ({
-				name: repo.name,
-				tags: repo.tags,
-				description: repo.description,
-			})),
-			// Several files can prove the same dependency; the diagram draws it once.
-			links: dependencyLinks(graph.edges),
+			nodes,
+			links,
 		};
 	},
 });
