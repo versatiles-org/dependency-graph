@@ -29,7 +29,7 @@ tags:
   - id: core
     title: Core
     hue: 25
-    summary: What VersaTiles cannot do without — the container format, the software that reads and serves it, and the styles, fonts and frontend that turn tiles into a map.
+    summary: What VersaTiles cannot do without — the software that reads and serves containers, and the styles, fonts and frontend that turn tiles into a map.
 
   - id: tools
     title: Tools
@@ -44,7 +44,7 @@ tags:
   - id: ecosystem
     title: Ecosystem
     hue: 250
-    summary: What surrounds the software — documentation, the websites, the public tile and download servers, and the packages it is installed from.
+    summary: What surrounds the software — documentation and specifications, the websites, the public tile, download and geocoding servers, and the packages it is installed from.
 
   - id: internal
     title: Internal helpers
@@ -62,17 +62,15 @@ repositories:
   'node-versatiles-container': [core]
   'versatiles-fonts': [core]
   'versatiles-frontend': [core]
-  'versatiles-glyphs-rs': [core]
   'versatiles-rs': [core]
-  'versatiles-spec': [core]
   'versatiles-style': [core]
 
   'maplibre-versatiles-styler': [tools]
   'node-versatiles-google-cloud': [tools]
   'node-versatiles-server': [tools]
   'node-versatiles-svelte': [tools]
-  'photon-stack': [tools]
   'versatiles-choro': [tools]
+  'versatiles-glyphs-rs': [tools]
   'versatiles-map-animator': [tools]
   'versatiles-map-editor': [tools]
   'versatiles-studio': [tools]
@@ -89,9 +87,8 @@ repositories:
   '.github': [ecosystem]
   'consortium': [ecosystem]
   'download.versatiles.org': [ecosystem]
-  'editor': [ecosystem]
   'homebrew-versatiles': [ecosystem]
-  'maputnik': [ecosystem]
+  'photon-stack': [ecosystem]
   'playground': [ecosystem]
   'shortbread-docs': [ecosystem]
   'showcases': [ecosystem]
@@ -100,6 +97,7 @@ repositories:
   'versatiles-docker': [ecosystem]
   'versatiles-documentation': [ecosystem]
   'versatiles-org.github.io': [ecosystem]
+  'versatiles-spec': [ecosystem]
 
   'dependency-graph': [internal]
   'node-release-tool': [internal]
@@ -128,7 +126,9 @@ images:
   ghcr.io/versatiles-org/planetiler-shortbread: planetiler-shortbread
 
 # Repositories left out of the graph entirely.
-exclude: []
+exclude:
+  - editor
+  - maputnik
 
 # Services that publish which releases they run. `npm run deps:drift` compares
 # each component with the latest GitHub release of the repository named here,
@@ -191,4 +191,8 @@ manual:
 
 # False positives. A rule that stops matching is reported, so this list cannot
 # quietly outlive the problem it was written for.
-ignore: []
+ignore:
+  - from: node-versatiles-container
+    to: versatiles-spec
+    kind: download
+    reason: links to the specification in doc comments, nothing is fetched

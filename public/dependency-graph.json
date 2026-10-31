@@ -4,7 +4,7 @@
 		{
 			"id": "core",
 			"title": "Core",
-			"summary": "What VersaTiles cannot do without — the container format, the software that reads and serves it, and the styles, fonts and frontend that turn tiles into a map.",
+			"summary": "What VersaTiles cannot do without — the software that reads and serves containers, and the styles, fonts and frontend that turn tiles into a map.",
 			"hue": 25
 		},
 		{
@@ -22,7 +22,7 @@
 		{
 			"id": "ecosystem",
 			"title": "Ecosystem",
-			"summary": "What surrounds the software — documentation, the websites, the public tile and download servers, and the packages it is installed from.",
+			"summary": "What surrounds the software — documentation and specifications, the websites, the public tile, download and geocoding servers, and the packages it is installed from.",
 			"hue": 250
 		},
 		{
@@ -65,14 +65,6 @@
 			"archived": false
 		},
 		{
-			"name": "editor",
-			"tags": ["ecosystem"],
-			"description": "Modified Maputnik for Versatiles Styles",
-			"language": "HTML",
-			"fork": false,
-			"archived": false
-		},
-		{
 			"name": "elevation",
 			"tags": ["tile-production"],
 			"description": null,
@@ -102,14 +94,6 @@
 			"description": "MapLibre GL JS plugin for editing and managing VersaTiles map styles directly in the browser.",
 			"language": "TypeScript",
 			"fork": false,
-			"archived": false
-		},
-		{
-			"name": "maputnik",
-			"tags": ["ecosystem"],
-			"description": "An open source visual editor for the 'MapLibre Style Specification'",
-			"language": "TypeScript",
-			"fork": true,
 			"archived": false
 		},
 		{
@@ -170,7 +154,7 @@
 		},
 		{
 			"name": "photon-stack",
-			"tags": ["tools"],
+			"tags": ["ecosystem"],
 			"description": null,
 			"language": "Shell",
 			"fork": false,
@@ -282,7 +266,7 @@
 		},
 		{
 			"name": "versatiles-glyphs-rs",
-			"tags": ["core"],
+			"tags": ["tools"],
 			"description": "Rust implementation of a signed-distance-field (SDF) glyph renderer used in map rendering.",
 			"language": "Rust",
 			"fork": false,
@@ -322,7 +306,7 @@
 		},
 		{
 			"name": "versatiles-spec",
-			"tags": ["core"],
+			"tags": ["ecosystem"],
 			"description": "Specification for VersaTiles containers.",
 			"language": null,
 			"fork": false,
@@ -457,22 +441,6 @@
 			"detail": "@versatiles/release-tool@^2.20.0",
 			"path": "package.json",
 			"line": 68
-		},
-		{
-			"from": "node-versatiles-container",
-			"to": "versatiles-spec",
-			"kind": "download",
-			"detail": "github.com/versatiles-org/versatiles-spec/blob",
-			"path": "src/index.ts",
-			"line": 165
-		},
-		{
-			"from": "node-versatiles-container",
-			"to": "versatiles-spec",
-			"kind": "download",
-			"detail": "github.com/versatiles-org/versatiles-spec/blob",
-			"path": "src/lib/interfaces.ts",
-			"line": 73
 		},
 		{
 			"from": "node-versatiles-google-cloud",
