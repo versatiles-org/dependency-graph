@@ -106,6 +106,7 @@ Housekeeping for the maintainers. Nothing here is needed to use VersaTiles.
 
 | Repository                                                               | Description                                                                         | Depends on | Used by |
 | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- | ---------- | ------- |
+| [dependency-graph](https://github.com/versatiles-org/dependency-graph)   | —                                                                                   | 0          | 0       |
 | [node-release-tool](https://github.com/versatiles-org/node-release-tool) | Helper tool for automating Node.js package releases across VersaTiles repositories. | 0          | 15      |
 
 ### Not yet categorised

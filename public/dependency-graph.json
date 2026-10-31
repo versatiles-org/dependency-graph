@@ -54,6 +54,14 @@
 			"archived": false
 		},
 		{
+			"name": "dependency-graph",
+			"tags": ["internal"],
+			"description": null,
+			"language": "TypeScript",
+			"fork": false,
+			"archived": false
+		},
+		{
 			"name": "download.versatiles.org",
 			"tags": ["ecosystem"],
 			"description": "Data download hub for VersaTiles datasets.",
