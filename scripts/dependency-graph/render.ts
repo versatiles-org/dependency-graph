@@ -8,7 +8,14 @@
  * diagram of their own.
  */
 
-import { EDGE_KIND_META, EDGE_KINDS, type Edge, type Graph, type RepoNode } from './model';
+import {
+	dependencyOf,
+	EDGE_KIND_META,
+	EDGE_KINDS,
+	type Edge,
+	type Graph,
+	type RepoNode,
+} from './model';
 import { CONFIG_PATH } from './config';
 
 /** Where the machine-readable copy of the graph lives in the repository. */
@@ -101,10 +108,11 @@ export function renderPage({ graph, branches, skipped }: RenderOptions): string 
 	const dependsOn = new Map<string, Set<string>>();
 	const usedBy = new Map<string, Set<string>>();
 	for (const edge of graph.edges) {
-		if (!dependsOn.has(edge.from)) dependsOn.set(edge.from, new Set());
-		if (!usedBy.has(edge.to)) usedBy.set(edge.to, new Set());
-		dependsOn.get(edge.from)?.add(edge.to);
-		usedBy.get(edge.to)?.add(edge.from);
+		const { from, to } = dependencyOf(edge);
+		if (!dependsOn.has(from)) dependsOn.set(from, new Set());
+		if (!usedBy.has(to)) usedBy.set(to, new Set());
+		dependsOn.get(from)?.add(to);
+		usedBy.get(to)?.add(from);
 	}
 
 	const tagTitles = new Map(graph.tags.map((tag) => [tag.id, tag.title]));

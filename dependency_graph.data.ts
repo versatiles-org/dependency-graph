@@ -3,7 +3,7 @@
  *
  * `public/dependency-graph.json` is the full record, evidence and all. The
  * component only needs to draw arrows, so this loader hands it a compact
- * payload: one entry per repository, one per distinct relation, and the
+ * payload: one entry per repository, one per dependent pair, and the
  * vocabulary of relation kinds taken straight from the generator — the page and
  * the diagram cannot disagree about what "download" means if neither of them
  * owns the word.
@@ -16,8 +16,14 @@ import { readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { defineLoader } from 'vitepress';
-import { EDGE_KINDS, EDGE_KIND_META } from './scripts/dependency-graph/model';
-import type { EdgeKind, EdgeLineStyle, Graph, TagInfo } from './scripts/dependency-graph/model';
+import { dependencyLinks, EDGE_KINDS, EDGE_KIND_META } from './scripts/dependency-graph/model';
+import type {
+	DependencyLink,
+	EdgeKind,
+	EdgeLineStyle,
+	Graph,
+	TagInfo,
+} from './scripts/dependency-graph/model';
 
 export interface GraphKind {
 	id: EdgeKind;
@@ -35,11 +41,7 @@ export interface GraphNode {
 	description: string | null;
 }
 
-export interface GraphLink {
-	from: string;
-	to: string;
-	kind: EdgeKind;
-}
+export type GraphLink = DependencyLink;
 
 export interface GraphData {
 	tags: TagInfo[];
@@ -59,16 +61,6 @@ export default defineLoader({
 			readFileSync(resolve(here, './public/dependency-graph.json'), 'utf8'),
 		) as Graph;
 
-		// Several files can prove the same relation; the diagram draws it once.
-		const seen = new Set<string>();
-		const links: GraphLink[] = [];
-		for (const edge of graph.edges) {
-			const key = `${edge.from} ${edge.to} ${edge.kind}`;
-			if (seen.has(key)) continue;
-			seen.add(key);
-			links.push({ from: edge.from, to: edge.to, kind: edge.kind });
-		}
-
 		return {
 			tags: graph.tags,
 			kinds: EDGE_KINDS.map((kind) => ({
@@ -82,7 +74,8 @@ export default defineLoader({
 				tags: repo.tags,
 				description: repo.description,
 			})),
-			links,
+			// Several files can prove the same dependency; the diagram draws it once.
+			links: dependencyLinks(graph.edges),
 		};
 	},
 });

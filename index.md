@@ -43,9 +43,9 @@ What VersaTiles cannot do without — the container format, the software that re
 | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------- | ------- |
 | [node-versatiles-container](https://github.com/versatiles-org/node-versatiles-container) | Node.js library for reading VersaTiles container files.                                                                   | 2          | 4       |
 | [versatiles-fonts](https://github.com/versatiles-org/versatiles-fonts)                   | Repository of open-source SDF fonts optimized for MapLibre GL JS rendering.                                               | 1          | 2       |
-| [versatiles-frontend](https://github.com/versatiles-org/versatiles-frontend)             | Frontend web applications for exploring VersaTiles maps and datasets.                                                     | 7          | 6       |
-| [versatiles-glyphs-rs](https://github.com/versatiles-org/versatiles-glyphs-rs)           | Rust implementation of a signed-distance-field (SDF) glyph renderer used in map rendering.                                | 1          | 2       |
-| [versatiles-rs](https://github.com/versatiles-org/versatiles-rs)                         | Core Rust implementation of the VersaTiles toolkit for converting, validating, and serving map tiles in multiple formats. | 2          | 8       |
+| [versatiles-frontend](https://github.com/versatiles-org/versatiles-frontend)             | Frontend web applications for exploring VersaTiles maps and datasets.                                                     | 6          | 6       |
+| [versatiles-glyphs-rs](https://github.com/versatiles-org/versatiles-glyphs-rs)           | Rust implementation of a signed-distance-field (SDF) glyph renderer used in map rendering.                                | 0          | 2       |
+| [versatiles-rs](https://github.com/versatiles-org/versatiles-rs)                         | Core Rust implementation of the VersaTiles toolkit for converting, validating, and serving map tiles in multiple formats. | 0          | 8       |
 | [versatiles-spec](https://github.com/versatiles-org/versatiles-spec)                     | Specification for VersaTiles containers.                                                                                  | 0          | 2       |
 | [versatiles-style](https://github.com/versatiles-org/versatiles-style)                   | Toolkit for generating MapLibre styles.                                                                                   | 1          | 13      |
 
@@ -63,7 +63,7 @@ Optional extras built on top of the core — libraries, editors, renderers and a
 | [versatiles-choro](https://github.com/versatiles-org/versatiles-choro)                         | Modular Docker-based pipeline for creating interactive choropleth maps                        | 3          | 0       |
 | [versatiles-map-animator](https://github.com/versatiles-org/versatiles-map-animator)           | Browser-based editor for composing keyframe camera animations on a VersaTiles map.            | 2          | 0       |
 | [versatiles-map-editor](https://github.com/versatiles-org/versatiles-map-editor)               | —                                                                                             | 3          | 0       |
-| [versatiles-studio](https://github.com/versatiles-org/versatiles-studio)                       | Cross-platform desktop application for opening, inspecting, styling and converting map tiles. | 6          | 1       |
+| [versatiles-studio](https://github.com/versatiles-org/versatiles-studio)                       | Cross-platform desktop application for opening, inspecting, styling and converting map tiles. | 5          | 1       |
 | [versatiles-svg-renderer](https://github.com/versatiles-org/versatiles-svg-renderer)           | renders maps as SVG                                                                           | 2          | 1       |
 
 ### Tile production
@@ -90,16 +90,16 @@ What surrounds the software — documentation, the websites, the public tile and
 | [consortium](https://github.com/versatiles-org/consortium)                             | —                                                                                             | 0          | 0       |
 | [download.versatiles.org](https://github.com/versatiles-org/download.versatiles.org)   | Data download hub for VersaTiles datasets.                                                    | 3          | 0       |
 | [editor](https://github.com/versatiles-org/editor)                                     | Modified Maputnik for Versatiles Styles                                                       | 0          | 0       |
-| [homebrew-versatiles](https://github.com/versatiles-org/homebrew-versatiles)           | Homebrew tap for installing VersaTiles CLI tools on macOS.                                    | 3          | 3       |
+| [homebrew-versatiles](https://github.com/versatiles-org/homebrew-versatiles)           | Homebrew tap for installing VersaTiles CLI tools on macOS.                                    | 3          | 0       |
 | [maputnik](https://github.com/versatiles-org/maputnik)                                 | An open source visual editor for the 'MapLibre Style Specification'                           | 0          | 0       |
-| [playground](https://github.com/versatiles-org/playground)                             | Interactive playground demonstrating how to use VersaTiles in web applications.               | 2          | 1       |
+| [playground](https://github.com/versatiles-org/playground)                             | Interactive playground demonstrating how to use VersaTiles in web applications.               | 2          | 0       |
 | [shortbread-docs](https://github.com/versatiles-org/shortbread-docs)                   | Documentation of the Shortbread vector tile schema                                            | 0          | 0       |
-| [showcases](https://github.com/versatiles-org/showcases)                               | Gallery of projects using VersaTiles                                                          | 0          | 1       |
+| [showcases](https://github.com/versatiles-org/showcases)                               | Gallery of projects using VersaTiles                                                          | 1          | 0       |
 | [tiles.versatiles.org](https://github.com/versatiles-org/tiles.versatiles.org)         | Tile hosting service for public VersaTiles datasets.                                          | 3          | 0       |
-| [tools](https://github.com/versatiles-org/tools)                                       | Utility scripts and helper tools built around the VersaTiles ecosystem.                       | 5          | 1       |
-| [versatiles-docker](https://github.com/versatiles-org/versatiles-docker)               | Docker images and build scripts for the VersaTiles ecosystem.                                 | 3          | 5       |
+| [tools](https://github.com/versatiles-org/tools)                                       | Utility scripts and helper tools built around the VersaTiles ecosystem.                       | 6          | 0       |
+| [versatiles-docker](https://github.com/versatiles-org/versatiles-docker)               | Docker images and build scripts for the VersaTiles ecosystem.                                 | 3          | 3       |
 | [versatiles-documentation](https://github.com/versatiles-org/versatiles-documentation) | Documentation for the VersaTiles ecosystem.                                                   | 1          | 0       |
-| [versatiles-org.github.io](https://github.com/versatiles-org/versatiles-org.github.io) | Source code for the public website at versatiles.org.                                         | 4          | 1       |
+| [versatiles-org.github.io](https://github.com/versatiles-org/versatiles-org.github.io) | Source code for the public website at versatiles.org.                                         | 1          | 3       |
 
 ### Internal helpers
 
@@ -235,15 +235,26 @@ Build scripts or runtime code fetch release assets or raw files from another rep
 
 :::
 
-### CI and release automation
+### CI workflows
 
-A GitHub Actions workflow uses an action, reusable workflow or dispatch of another repository.
+A GitHub Actions workflow uses an action, reusable workflow or checkout of another repository.
 
-::: details Where these 9 links come from
+::: details Where these 1 links come from
+
+| From                  | To         | Found                       | Source                                                                                                                     |
+| --------------------- | ---------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| planetiler-shortbread | planetiler | `versatiles-org/planetiler` | [.github/workflows/ci.yml](https://github.com/versatiles-org/planetiler-shortbread/blob/main/.github/workflows/ci.yml#L81) |
+
+:::
+
+### Release triggers
+
+A workflow starts a build in another repository. The table lists who starts whom; the arrow in the graph runs the other way, because the repository being rebuilt is the one that depends on the other.
+
+::: details Where these 8 links come from
 
 | From                     | To                  | Found                                                       | Source                                                                                                                                         |
 | ------------------------ | ------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| planetiler-shortbread    | planetiler          | `versatiles-org/planetiler`                                 | [.github/workflows/ci.yml](https://github.com/versatiles-org/planetiler-shortbread/blob/main/.github/workflows/ci.yml#L81)                     |
 | versatiles-frontend      | versatiles-docker   | `gh workflow run --repo versatiles-org/versatiles-docker`   | [.github/workflows/release.yml](https://github.com/versatiles-org/versatiles-frontend/blob/main/.github/workflows/release.yml#L86)             |
 | versatiles-glyphs-rs     | homebrew-versatiles | `gh workflow run --repo versatiles-org/homebrew-versatiles` | [.github/workflows/release.yml](https://github.com/versatiles-org/versatiles-glyphs-rs/blob/main/.github/workflows/release.yml#L125)           |
 | versatiles-org.github.io | playground          | `gh workflow run --repo versatiles-org/playground`          | [.github/workflows/gh-release.yml](https://github.com/versatiles-org/versatiles-org.github.io/blob/main/.github/workflows/gh-release.yml#L145) |

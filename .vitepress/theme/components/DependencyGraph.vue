@@ -5,7 +5,7 @@ import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
 import { data, type GraphLink, type GraphNode } from '../../../dependency_graph.data';
 
 /** The relation kinds the generator defines, without importing them twice. */
-type EdgeKind = GraphLink['kind'];
+type EdgeKind = GraphLink['kinds'][number];
 
 interface Point {
 	x: number;
@@ -21,7 +21,8 @@ interface Box extends GraphNode {
 interface Link {
 	source: Box;
 	target: Box;
-	kind: EdgeKind;
+	/** Every kind behind this dependency, the most substantial first. */
+	kinds: EdgeKind[];
 }
 
 /** Gap between layers, and between neighbours inside one. */
@@ -37,7 +38,7 @@ const links: Link[] = (() => {
 		const source = byName.get(link.from);
 		const target = byName.get(link.to);
 		if (!source || !target) return [];
-		return [{ source, target, kind: link.kind }];
+		return [{ source, target, kinds: link.kinds }];
 	});
 })();
 
@@ -58,7 +59,8 @@ function lineStyle(kind: EdgeKind): Record<string, string> {
 		'--dg-link-opacity': String(line?.opacity ?? 1),
 	};
 }
-const usedKinds = data.kinds.filter((kind) => links.some((link) => link.kind === kind.id));
+const usedKinds = data.kinds.filter((kind) => links.some((link) => link.kinds.includes(kind.id)));
+const kindTitles = new Map(data.kinds.map((kind) => [kind.id, kind.title]));
 /**
  * The hue comes with the tag, so that what a colour means is decided where the
  * tags are. A tag without one is drawn grey: chroma is switched off rather than
@@ -88,6 +90,11 @@ const tagOn = reactive<Record<string, boolean>>(
 );
 const showUnconnected = ref(true);
 
+/** A link is drawn as the most substantial of its kinds still switched on. */
+function drawnKind(link: Link): EdgeKind {
+	return link.kinds.find((kind) => kindOn[kind]) ?? link.kinds[0];
+}
+
 /**
  * What the filters leave standing. Hidden nodes stay in the DOM and keep their
  * last position — they are only left out of the layout — so switching a filter
@@ -105,7 +112,10 @@ const visible = computed(() => {
 	}
 
 	const activeLinks = links.filter(
-		(link) => kindOn[link.kind] && shown.get(link.source.name) && shown.get(link.target.name),
+		(link) =>
+			link.kinds.some((kind) => kindOn[kind]) &&
+			shown.get(link.source.name) &&
+			shown.get(link.target.name),
 	);
 
 	if (!showUnconnected.value) {
@@ -170,8 +180,9 @@ interface ElkGraph {
  * node's border, which is what unpicks the fan of a dozen arrows arriving at
  * one hub — the thing dagre leaves stacked on a single corner.
  *
- * Cycles — versatiles-frontend triggers the Docker build, which downloads a
- * frontend release — are broken by ELK itself.
+ * The links arrive free of cycles as long as the data has none: the release
+ * triggers that used to close them are already turned around. Should a real
+ * cycle appear, ELK breaks it by drawing an arrow of its choice backward.
  */
 async function computeLayout(): Promise<Layout> {
 	const shownNodes = visible.value.nodes;
@@ -194,7 +205,7 @@ async function computeLayout(): Promise<Layout> {
 			'elk.layered.spacing.edgeEdgeBetweenLayers': '10',
 			'elk.layered.spacing.edgeNodeBetweenLayers': '18',
 			'elk.layered.cycleBreaking.strategy': 'GREEDY',
-			'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+			'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
 			'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
 			// Repositories with nothing left to connect to are laid out beside the
 			// rest rather than padding out the first rank.
@@ -213,7 +224,7 @@ async function computeLayout(): Promise<Layout> {
 			// A build-time dependency is worth keeping straight and pointing the
 			// right way more than a CI trigger is, so the kind weights carry over.
 			layoutOptions: {
-				'elk.layered.priority.direction': String(kindWeight.get(link.kind) ?? 1),
+				'elk.layered.priority.direction': String(kindWeight.get(drawnKind(link)) ?? 1),
 			},
 		})),
 	};
@@ -557,6 +568,7 @@ const view = computed(() => {
 		})),
 		links: links.map((link, index) => ({
 			link,
+			kind: drawnKind(link),
 			path: pathOf(shown.edges.get(index) ?? []),
 			hidden: !activeLinks.has(link),
 			dimmed: active !== null && link.source.name !== active && link.target.name !== active,
@@ -611,6 +623,18 @@ function pathOf(points: Point[]): string {
 function describe(node: Box): string {
 	const tags = node.tags.map((tag) => tagTitles.get(tag) ?? tag).join(', ');
 	return `${node.name} — ${tags}${node.description ? `. ${node.description}` : ''}`;
+}
+
+/**
+ * Native tooltip: every way a dependency is expressed. One line stands for all
+ * of them, and an arrow alone cannot say that the target also starts a build.
+ */
+function describeLink(link: Link): string {
+	const kinds = link.kinds.map((kind) => kindTitles.get(kind) ?? kind).join(', ');
+	const dispatch = link.kinds.includes('dispatch')
+		? `. ${link.target.name} starts a build of ${link.source.name}`
+		: '';
+	return `${link.source.name} depends on ${link.target.name} — ${kinds}${dispatch}`;
 }
 
 /** Reads the real width of every label, so boxes and ranks match the text. */
@@ -772,10 +796,12 @@ onBeforeUnmount(() => {
 						:key="index"
 						class="link"
 						:class="{ dimmed: edge.dimmed, hidden: edge.hidden }"
-						:style="lineStyle(edge.link.kind)"
+						:style="lineStyle(edge.kind)"
 						:d="edge.path"
-						:marker-end="`url(#dg-arrow-${edge.link.kind})`"
-					/>
+						:marker-end="`url(#dg-arrow-${edge.kind})`"
+					>
+						<title>{{ describeLink(edge.link) }}</title>
+					</path>
 
 					<g
 						v-for="entry in view.nodes"

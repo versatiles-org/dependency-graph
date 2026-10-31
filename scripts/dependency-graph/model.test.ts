@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { EDGE_KINDS, EDGE_KIND_META, sortEdges, type Edge } from './model';
+import {
+	EDGE_KINDS,
+	EDGE_KIND_META,
+	dependencyLinks,
+	dependencyOf,
+	sortEdges,
+	type Edge,
+} from './model';
 
 const edge = (from: string, to: string, kind: Edge['kind'], detail = ''): Edge => ({
 	from,
@@ -42,6 +49,41 @@ describe('the vocabulary of dependency kinds', () => {
 			return `${line.width}|${line.dash}|${line.head}`;
 		});
 		expect(new Set(shapes).size, 'two kinds would be drawn identically').toBe(EDGE_KINDS.length);
+	});
+});
+
+describe('dependencyOf', () => {
+	it('takes most edges as written', () => {
+		expect(dependencyOf(edge('app', 'lib', 'workflow'))).toEqual({ from: 'app', to: 'lib' });
+	});
+
+	it('turns a dispatch around, because the repository started is the dependent one', () => {
+		expect(dependencyOf(edge('lib', 'app', 'dispatch'))).toEqual({ from: 'app', to: 'lib' });
+	});
+});
+
+describe('dependencyLinks', () => {
+	it('folds a download and the dispatch that goes with it into one link', () => {
+		const links = dependencyLinks([
+			edge('versatiles-rs', 'homebrew', 'dispatch'),
+			edge('homebrew', 'versatiles-rs', 'download'),
+		]);
+		expect(links).toEqual([
+			{ from: 'homebrew', to: 'versatiles-rs', kinds: ['download', 'dispatch'] },
+		]);
+	});
+
+	it('lists a kind once, however many files prove it', () => {
+		const links = dependencyLinks([
+			edge('app', 'lib', 'npm', 'one'),
+			edge('app', 'lib', 'npm', 'two'),
+		]);
+		expect(links).toEqual([{ from: 'app', to: 'lib', kinds: ['npm'] }]);
+	});
+
+	it('keeps opposite dependencies apart when neither is a dispatch', () => {
+		const links = dependencyLinks([edge('a', 'b', 'download'), edge('b', 'a', 'download')]);
+		expect(links).toHaveLength(2);
 	});
 });
 

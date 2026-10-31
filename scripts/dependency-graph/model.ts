@@ -1,6 +1,14 @@
 /** Types shared by the dependency graph collector and renderer. */
 
-export const EDGE_KINDS = ['npm', 'cargo', 'docker', 'download', 'workflow', 'manual'] as const;
+export const EDGE_KINDS = [
+	'npm',
+	'cargo',
+	'docker',
+	'download',
+	'workflow',
+	'dispatch',
+	'manual',
+] as const;
 
 export type EdgeKind = (typeof EDGE_KINDS)[number];
 
@@ -38,34 +46,41 @@ export const EDGE_KIND_META: Record<EdgeKind, EdgeKindMeta> = {
 	npm: {
 		title: 'npm packages',
 		summary: 'The repository lists a `@versatiles/…` package among its npm dependencies.',
-		weight: 6,
+		weight: 7,
 		line: { width: 1.5, dash: 'none', head: 'filled', opacity: 1 },
 	},
 	cargo: {
 		title: 'Rust crates',
 		summary: 'The repository depends on one of the project’s crates in `Cargo.toml`.',
-		weight: 5,
+		weight: 6,
 		line: { width: 1.5, dash: '2 3', head: 'filled', opacity: 1 },
 	},
 	docker: {
 		title: 'Docker images',
 		summary: 'A `Dockerfile` builds on an image produced by another repository.',
-		weight: 4,
+		weight: 5,
 		line: { width: 1.5, dash: '8 4', head: 'filled', opacity: 1 },
 	},
 	download: {
 		title: 'Downloaded artifacts',
 		summary:
 			'Build scripts or runtime code fetch release assets or raw files from another repository.',
-		weight: 3,
+		weight: 4,
 		line: { width: 1, dash: 'none', head: 'filled', opacity: 0.5 },
 	},
 	workflow: {
-		title: 'CI and release automation',
+		title: 'CI workflows',
 		summary:
-			'A GitHub Actions workflow uses an action, reusable workflow or dispatch of another repository.',
-		weight: 2,
+			'A GitHub Actions workflow uses an action, reusable workflow or checkout of another repository.',
+		weight: 3,
 		line: { width: 1, dash: '8 4', head: 'filled', opacity: 0.5 },
+	},
+	dispatch: {
+		title: 'Release triggers',
+		summary:
+			'A workflow starts a build in another repository. The table lists who starts whom; the arrow in the graph runs the other way, because the repository being rebuilt is the one that depends on the other.',
+		weight: 2,
+		line: { width: 1, dash: '4 3', head: 'filled', opacity: 0.5 },
 	},
 	manual: {
 		title: 'Declared by hand',
@@ -77,9 +92,12 @@ export const EDGE_KIND_META: Record<EdgeKind, EdgeKindMeta> = {
 };
 
 export interface Edge {
-	/** Repository that depends on something. */
+	/**
+	 * Repository the evidence was found in. That is the one depending on `to`,
+	 * except for a `dispatch`: see {@link dependencyOf}.
+	 */
 	from: string;
-	/** Repository it depends on. */
+	/** Repository the evidence names. */
 	to: string;
 	kind: EdgeKind;
 	/** What exactly was found, e.g. an npm package name or an image tag. */
@@ -119,6 +137,45 @@ export interface Graph {
 	tags: TagInfo[];
 	repos: RepoNode[];
 	edges: Edge[];
+}
+
+/**
+ * Which repository depends on which.
+ *
+ * A dispatch is written down in the repository that fires it, but the dependency
+ * runs the other way: when versatiles-rs starts the Homebrew build, Homebrew is
+ * what follows versatiles-rs. Taken literally, these edges form cycles with the
+ * downloads they accompany, and a layered layout can only draw a cycle by
+ * pointing some of its arrows backward.
+ */
+export function dependencyOf(edge: Edge): { from: string; to: string } {
+	return edge.kind === 'dispatch'
+		? { from: edge.to, to: edge.from }
+		: { from: edge.from, to: edge.to };
+}
+
+/** One dependency between two repositories, however many ways it is expressed. */
+export interface DependencyLink {
+	from: string;
+	to: string;
+	/** Every kind behind it, the most substantial first. */
+	kinds: EdgeKind[];
+}
+
+/** Folds the evidence into one link per dependent pair, in first-seen order. */
+export function dependencyLinks(edges: Edge[]): DependencyLink[] {
+	const links = new Map<string, DependencyLink>();
+	for (const edge of edges) {
+		const { from, to } = dependencyOf(edge);
+		const key = `${from} ${to}`;
+		const link = links.get(key) ?? { from, to, kinds: [] };
+		if (!link.kinds.includes(edge.kind)) link.kinds.push(edge.kind);
+		links.set(key, link);
+	}
+	for (const link of links.values()) {
+		link.kinds.sort((a, b) => EDGE_KIND_META[b].weight - EDGE_KIND_META[a].weight);
+	}
+	return [...links.values()];
 }
 
 /** Stable ordering, so regenerating without upstream changes produces no diff. */

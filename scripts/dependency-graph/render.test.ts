@@ -101,6 +101,39 @@ describe('renderPage', () => {
 		expect(cells.slice(-3, -1)).toEqual(['2', '0']);
 	});
 
+	it('counts a dispatch for the repository it starts, not the one that fires it', () => {
+		const dispatched = renderPage({
+			graph: {
+				...graph,
+				edges: [
+					{
+						from: 'versatiles-rs',
+						to: 'versatiles-style',
+						kind: 'dispatch',
+						detail: 'gh workflow run --repo versatiles-org/versatiles-style',
+						path: '.github/workflows/release.yml',
+						line: 3,
+					},
+				],
+			},
+			branches: new Map(),
+			skipped: [],
+		});
+		const counts = (name: string): string[] => {
+			const row = dispatched.split('\n').find((line) => line.includes(`[${name}]`)) ?? '';
+			return row
+				.split('|')
+				.map((cell) => cell.trim())
+				.slice(-3, -1);
+		};
+		expect(counts('versatiles-style')).toEqual(['1', '0']);
+		expect(counts('versatiles-rs')).toEqual(['0', '1']);
+		// The evidence stays where it was found.
+		expect(dispatched).toContain(
+			'https://github.com/versatiles-org/versatiles-rs/blob/main/.github/workflows/release.yml#L3',
+		);
+	});
+
 	it('links every finding back to the line it came from', () => {
 		expect(page).toContain(
 			'https://github.com/versatiles-org/versatiles-style/blob/main/package.json#L12',

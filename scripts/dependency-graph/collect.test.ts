@@ -350,7 +350,7 @@ describe('downloaded artifacts', () => {
 		);
 		const { edges, warnings } = collect([workflow], ['versatiles-frontend', 'versatiles-docker']);
 		expect(warnings).toHaveLength(0);
-		expect(asPairs(edges)).toEqual(['versatiles-frontend workflow versatiles-docker']);
+		expect(asPairs(edges)).toEqual(['versatiles-frontend dispatch versatiles-docker']);
 	});
 
 	it('treats a bare link to a repository as a mention, not a dependency', () => {
@@ -365,7 +365,7 @@ describe('downloaded artifacts', () => {
 });
 
 describe('CI and release automation', () => {
-	it('follows actions, cross-repository checkouts and dispatches', () => {
+	it('follows actions and cross-repository checkouts', () => {
 		const workflow = file(
 			'planetiler-shortbread',
 			'.github/workflows/ci.yml',
@@ -408,8 +408,8 @@ describe('CI and release automation', () => {
 			['versatiles-org.github.io', 'playground', 'tools'],
 		);
 		expect(asPairs(edges)).toEqual([
-			'versatiles-org.github.io workflow playground',
-			'versatiles-org.github.io workflow tools',
+			'versatiles-org.github.io dispatch playground',
+			'versatiles-org.github.io dispatch tools',
 		]);
 		expect(edges.find((edge) => edge.to === 'playground')?.line).toBe(7);
 	});

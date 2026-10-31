@@ -829,7 +829,7 @@
 		{
 			"from": "versatiles-frontend",
 			"to": "versatiles-docker",
-			"kind": "workflow",
+			"kind": "dispatch",
 			"detail": "gh workflow run --repo versatiles-org/versatiles-docker",
 			"path": ".github/workflows/release.yml",
 			"line": 86
@@ -869,7 +869,7 @@
 		{
 			"from": "versatiles-glyphs-rs",
 			"to": "homebrew-versatiles",
-			"kind": "workflow",
+			"kind": "dispatch",
 			"detail": "gh workflow run --repo versatiles-org/homebrew-versatiles",
 			"path": ".github/workflows/release.yml",
 			"line": 125
@@ -925,7 +925,7 @@
 		{
 			"from": "versatiles-org.github.io",
 			"to": "playground",
-			"kind": "workflow",
+			"kind": "dispatch",
 			"detail": "gh workflow run --repo versatiles-org/playground",
 			"path": ".github/workflows/gh-release.yml",
 			"line": 145
@@ -933,7 +933,7 @@
 		{
 			"from": "versatiles-org.github.io",
 			"to": "showcases",
-			"kind": "workflow",
+			"kind": "dispatch",
 			"detail": "gh workflow run --repo versatiles-org/showcases",
 			"path": ".github/workflows/gh-release.yml",
 			"line": 165
@@ -941,7 +941,7 @@
 		{
 			"from": "versatiles-org.github.io",
 			"to": "tools",
-			"kind": "workflow",
+			"kind": "dispatch",
 			"detail": "gh workflow run --repo versatiles-org/tools",
 			"path": ".github/workflows/gh-release.yml",
 			"line": 125
@@ -949,7 +949,7 @@
 		{
 			"from": "versatiles-rs",
 			"to": "homebrew-versatiles",
-			"kind": "workflow",
+			"kind": "dispatch",
 			"detail": "gh workflow run --repo versatiles-org/homebrew-versatiles",
 			"path": ".github/workflows/release.yml",
 			"line": 1156
@@ -957,7 +957,7 @@
 		{
 			"from": "versatiles-rs",
 			"to": "versatiles-docker",
-			"kind": "workflow",
+			"kind": "dispatch",
 			"detail": "gh workflow run --repo versatiles-org/versatiles-docker",
 			"path": ".github/workflows/release.yml",
 			"line": 1146
@@ -965,7 +965,7 @@
 		{
 			"from": "versatiles-studio",
 			"to": "homebrew-versatiles",
-			"kind": "workflow",
+			"kind": "dispatch",
 			"detail": "gh workflow run --repo versatiles-org/homebrew-versatiles",
 			"path": ".github/workflows/release.yml",
 			"line": 465

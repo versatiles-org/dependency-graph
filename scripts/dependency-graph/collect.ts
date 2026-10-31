@@ -292,7 +292,7 @@ const WORKFLOW_REPOSITORY = /repository:\s*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]
 /** One repository starting another's workflow run: `…/repos/ORG/NAME/actions/…`. */
 const WORKFLOW_DISPATCH = /api\.github\.com\/repos\/ORG\/([A-Za-z0-9_.-]+)\/actions\/\S*/g;
 
-/** Reusable workflows, custom actions, cross-repository checkouts and dispatches. */
+/** Reusable workflows, custom actions and cross-repository checkouts. */
 function extractWorkflow(file: RepoFile, context: Context): Edge[] {
 	const edges: Edge[] = [];
 	const org = `${context.config.org}/`;
@@ -348,7 +348,7 @@ function extractDispatches(file: RepoFile, context: Context): Edge[] {
 		edges.push({
 			from: file.repo,
 			to: match[1],
-			kind: 'workflow',
+			kind: 'dispatch',
 			detail: `gh workflow run --repo ${org}/${match[1]}`,
 			path: file.path,
 			line: lineAt(text, match.index),
@@ -358,7 +358,7 @@ function extractDispatches(file: RepoFile, context: Context): Edge[] {
 		edges.push({
 			from: file.repo,
 			to: match[1],
-			kind: 'workflow',
+			kind: 'dispatch',
 			detail: match[0].replace(/^https?:\/\//, ''),
 			path: file.path,
 			line: lineAt(file.text, match.index),
