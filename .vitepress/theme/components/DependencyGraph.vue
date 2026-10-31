@@ -84,8 +84,10 @@ function primaryTag(node: GraphNode): string {
 const kindOn = reactive<Record<string, boolean>>(
 	Object.fromEntries(usedKinds.map((kind) => [kind.id, true])),
 );
+/** Dimmed until asked for, so the first view leads with the software itself. */
+const TAGS_OFF_AT_START = new Set(['ecosystem', 'internal']);
 const tagOn = reactive<Record<string, boolean>>(
-	Object.fromEntries(data.tags.map((tag) => [tag.id, true])),
+	Object.fromEntries(data.tags.map((tag) => [tag.id, !TAGS_OFF_AT_START.has(tag.id)])),
 );
 const showUnconnected = ref(true);
 
