@@ -8,8 +8,8 @@
  * the diagram cannot disagree about what "download" means if neither of them
  * owns the word.
  *
- * Layering is deliberately not done here: the component recomputes it whenever
- * a filter changes, and one implementation is easier to trust than two.
+ * Layering is deliberately not done here: it needs the label widths the
+ * component measures in the browser.
  */
 
 import { readFileSync } from 'fs';

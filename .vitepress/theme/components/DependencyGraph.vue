@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue';
 import { select } from 'd3-selection';
 import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
 import { data, type GraphLink, type GraphNode } from '../../../dependency_graph.data';
@@ -28,7 +28,6 @@ interface Link {
 /** Gap between layers, and between neighbours inside one. */
 const RANK_GAP = 90;
 const NODE_GAP = 26;
-const TWEEN_MS = 450;
 
 const nodes: Box[] = data.nodes.map((node) => ({ ...node, w: 90, h: 22 }));
 const byName = new Map(nodes.map((node) => [node.name, node]));
@@ -96,9 +95,9 @@ function drawnKind(link: Link): EdgeKind {
 }
 
 /**
- * What the filters leave standing. Hidden nodes stay in the DOM and keep their
- * last position — they are only left out of the layout — so switching a filter
- * back on brings them in from where they were rather than from nowhere.
+ * What the filters leave at full strength. Everything else is only dimmed: the
+ * layout always holds every repository and dependency, so a repository stays
+ * where the reader last saw it whichever filters are on.
  */
 const visible = computed(() => {
 	const shown = new Map<string, boolean>();
@@ -136,23 +135,6 @@ interface Layout {
 	edges: Map<number, Point[]>;
 }
 
-/**
- * elkjs is a megabyte of layout engine, so it is fetched once, on demand, and
- * only by the page that draws the graph.
- */
-let engine: { layout: (graph: ElkGraph) => Promise<ElkGraph> } | undefined;
-
-async function layoutEngine(): Promise<{ layout: (graph: ElkGraph) => Promise<ElkGraph> }> {
-	if (!engine) {
-		// elkjs types its graph loosely; the shape used here is declared below.
-		const { default: Elk } = (await import('elkjs/lib/elk.bundled.js')) as unknown as {
-			default: new () => { layout: (graph: ElkGraph) => Promise<ElkGraph> };
-		};
-		engine = new Elk();
-	}
-	return engine;
-}
-
 interface ElkGraph {
 	id: string;
 	layoutOptions?: Record<string, string>;
@@ -183,14 +165,15 @@ interface ElkGraph {
  * The links arrive free of cycles as long as the data has none: the release
  * triggers that used to close them are already turned around. Should a real
  * cycle appear, ELK breaks it by drawing an arrow of its choice backward.
+ *
+ * It runs once, over the whole graph, and filters never touch the result. elkjs
+ * is a megabyte of layout engine, so only the page that draws the graph fetches it.
  */
 async function computeLayout(): Promise<Layout> {
-	const shownNodes = visible.value.nodes;
-	const activeLinks = visible.value.links;
-	const indexed: { link: Link; index: number }[] = [];
-	links.forEach((link, index) => {
-		if (activeLinks.includes(link)) indexed.push({ link, index });
-	});
+	// elkjs types its graph loosely; the shape used here is declared above.
+	const { default: Elk } = (await import('elkjs/lib/elk.bundled.js')) as unknown as {
+		default: new () => { layout: (graph: ElkGraph) => Promise<ElkGraph> };
+	};
 
 	const graph: ElkGraph = {
 		id: 'root',
@@ -207,29 +190,29 @@ async function computeLayout(): Promise<Layout> {
 			'elk.layered.cycleBreaking.strategy': 'GREEDY',
 			'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
 			'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-			// Repositories with nothing left to connect to are laid out beside the
-			// rest rather than padding out the first rank.
+			// Repositories with nothing to connect to are laid out beside the rest
+			// rather than padding out the first rank.
 			'elk.separateConnectedComponents': 'true',
 			'elk.spacing.componentComponent': '40',
 		},
-		children: shownNodes.map((node) => ({
+		children: nodes.map((node) => ({
 			id: node.name,
 			width: node.w,
 			height: node.h,
 		})),
-		edges: indexed.map(({ link, index }) => ({
+		edges: links.map((link, index) => ({
 			id: String(index),
 			sources: [link.source.name],
 			targets: [link.target.name],
 			// A build-time dependency is worth keeping straight and pointing the
 			// right way more than a CI trigger is, so the kind weights carry over.
 			layoutOptions: {
-				'elk.layered.priority.direction': String(kindWeight.get(drawnKind(link)) ?? 1),
+				'elk.layered.priority.direction': String(kindWeight.get(link.kinds[0]) ?? 1),
 			},
 		})),
 	};
 
-	const laid = await (await layoutEngine()).layout(graph);
+	const laid = await new Elk().layout(graph);
 
 	const placed = new Map<string, Point>();
 	for (const child of laid.children ?? []) {
@@ -251,67 +234,8 @@ async function computeLayout(): Promise<Layout> {
 		]);
 	}
 
-	// Anything ELK could not place keeps whatever it had, rather than jumping to
-	// the origin and dragging the camera with it.
-	for (const node of shownNodes) {
-		if (!placed.has(node.name))
-			placed.set(node.name, shown.nodes.get(node.name) ?? { x: 0, y: 0 });
-	}
 	return { nodes: placed, edges: routed };
 }
-
-/** Normalised distance along a polyline at each of its own vertices. */
-function vertexParameters(points: Point[]): number[] {
-	const along = [0];
-	for (let i = 1; i < points.length; i++) {
-		along.push(
-			along[i - 1] + Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y),
-		);
-	}
-	const total = along[along.length - 1] || 1;
-	return along.map((distance) => distance / total);
-}
-
-/** The point a given fraction of the way along a polyline. */
-function pointAt(points: Point[], parameters: number[], fraction: number): Point {
-	let segment = 1;
-	while (segment < points.length - 1 && parameters[segment] < fraction) segment++;
-	const from = points[segment - 1];
-	const to = points[segment];
-	const span = parameters[segment] - parameters[segment - 1] || 1;
-	const share = Math.min(1, Math.max(0, (fraction - parameters[segment - 1]) / span));
-	return { x: from.x + (to.x - from.x) * share, y: from.y + (to.y - from.y) * share };
-}
-
-/**
- * Puts two polylines on a common set of points, so that one can be moved into
- * the other point by point.
- *
- * Sampling both at even intervals is the obvious way and the wrong one: the
- * samples land in the middle of long straight runs and miss the corners, so an
- * orthogonal route spends the whole animation as a wobbling curve and only
- * snaps square at the end. Taking the union of the two shapes' own corner
- * positions instead means every corner of either shape is a point in both, and
- * a right angle stays a right angle all the way across.
- */
-function align(from: Point[], to: Point[]): { from: Point[]; to: Point[] } {
-	const fromAt = vertexParameters(from);
-	const toAt = vertexParameters(to);
-
-	const shared: number[] = [];
-	for (const fraction of [...fromAt, ...toAt].sort((a, b) => a - b)) {
-		if (shared.length === 0 || fraction - shared[shared.length - 1] > 1e-6) shared.push(fraction);
-	}
-
-	return {
-		from: shared.map((fraction) => pointAt(from, fromAt, fraction)),
-		to: shared.map((fraction) => pointAt(to, toAt, fraction)),
-	};
-}
-
-/* --------------------------------------------------------------------------
- * Animation
- * ----------------------------------------------------------------------- */
 
 const root = ref<HTMLElement>();
 const figure = ref<HTMLElement>();
@@ -322,128 +246,15 @@ const expanded = ref(false);
 const size = ref({ width: 960, height: 560 });
 const transform = shallowRef<ZoomTransform>(zoomIdentity);
 const hovered = ref<string | null>(null);
-
-/** Bumped on every animation frame; the render reads it to stay in step. */
-const frame = ref(0);
-
-/** Where everything is drawn right now, which is what the tween moves. */
-const shown: Layout = { nodes: new Map(), edges: new Map() };
-let tween:
-	| {
-			from: Layout;
-			to: Layout;
-			/** The layout as ELK gave it, kept to restore once the motion is over. */
-			exact: Layout;
-			start: number;
-	  }
-	| undefined;
-let raf = 0;
-
-function reducedMotion(): boolean {
-	return (
-		typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-	);
-}
-
-function ease(t: number): number {
-	return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
-
-function settle(target: Layout): void {
-	for (const [name, point] of target.nodes) shown.nodes.set(name, point);
-	for (const [index, points] of target.edges) shown.edges.set(index, points);
-	frame.value++;
-	if (!userMoved) fitView();
-}
-
-/**
- * The layout is recomputed from scratch on every change, so both ends of the
- * move are known: nodes slide from where they were to where they belong, and
- * edges are resampled to a common point count so their shapes can do the same.
- * Anything that was not on screen before starts at its destination and fades in.
- */
-function animateTo(target: Layout): void {
-	if (reducedMotion()) {
-		settle(target);
-		return;
-	}
-
-	const from: Layout = { nodes: new Map(), edges: new Map() };
-	const to: Layout = { nodes: target.nodes, edges: new Map() };
-	for (const [name, point] of target.nodes) from.nodes.set(name, shown.nodes.get(name) ?? point);
-	for (const [index, points] of target.edges) {
-		const previous = shown.edges.get(index);
-		// An edge that was not on screen starts at its destination and fades in.
-		const pair = align(previous && previous.length >= 2 ? previous : points, points);
-		from.edges.set(index, pair.from);
-		to.edges.set(index, pair.to);
-	}
-
-	tween = { from, to, exact: target, start: performance.now() };
-	cancelAnimationFrame(raf);
-	raf = requestAnimationFrame(step);
-}
-
-function step(now: number): void {
-	if (!tween) return;
-	const t = Math.min(1, (now - tween.start) / TWEEN_MS);
-	const k = ease(t);
-
-	for (const [name, end] of tween.to.nodes) {
-		const begin = tween.from.nodes.get(name) ?? end;
-		shown.nodes.set(name, {
-			x: begin.x + (end.x - begin.x) * k,
-			y: begin.y + (end.y - begin.y) * k,
-		});
-	}
-	for (const [index, end] of tween.to.edges) {
-		const begin = tween.from.edges.get(index) ?? end;
-		shown.edges.set(
-			index,
-			end.map((point, i) => ({
-				x: (begin[i]?.x ?? point.x) + (point.x - (begin[i]?.x ?? point.x)) * k,
-				y: (begin[i]?.y ?? point.y) + (point.y - (begin[i]?.y ?? point.y)) * k,
-			})),
-		);
-	}
-
-	frame.value++;
-	if (!userMoved) fitView();
-
-	if (t < 1) {
-		raf = requestAnimationFrame(step);
-		return;
-	}
-
-	// Morphing one edge into another needs both to have the same number of
-	// points, so the shapes are resampled while they move. Keeping those evenly
-	// spaced points afterwards would leave every edge with twenty corners for
-	// pathOf to round off instead of the two the router gave it — orthogonal
-	// lines would come out of the first filter change visibly wobbly.
-	settle(tween.exact);
-	tween = undefined;
-}
-
-/** Guards against a slow layout landing after a newer one has been asked for. */
-let pending = 0;
-
-async function relayout(): Promise<void> {
-	// A filter change reframes the picture; whatever the reader was looking at
-	// may not even be on screen any more.
-	userMoved = false;
-	const token = ++pending;
-	const target = await computeLayout();
-	if (token === pending) animateTo(target);
-}
+const layout = shallowRef<Layout>({ nodes: new Map(), edges: new Map() });
 
 /* --------------------------------------------------------------------------
  * Camera
  * ----------------------------------------------------------------------- */
 
 /**
- * The layout has its own coordinates, so the camera fits itself around what is
- * on screen. Panning or zooming takes it over, until a filter changes or the
- * reader asks for it back.
+ * The layout has its own coordinates, so the camera fits itself around the whole
+ * graph. Panning or zooming takes it over, until the reader asks for it back.
  */
 let userMoved = false;
 
@@ -455,8 +266,8 @@ function fitView(): void {
 	let minY = Infinity;
 	let maxX = -Infinity;
 	let maxY = -Infinity;
-	for (const node of visible.value.nodes) {
-		const at = shown.nodes.get(node.name);
+	for (const node of nodes) {
+		const at = layout.value.nodes.get(node.name);
 		if (!at) continue;
 		minX = Math.min(minX, at.x - node.w / 2);
 		maxX = Math.max(maxX, at.x + node.w / 2);
@@ -558,19 +369,17 @@ const view = computed(() => {
 	}
 
 	return {
-		// Read so the render follows the animation; the value itself is not used.
-		tick: frame.value,
 		nodes: nodes.map((node) => ({
 			node,
-			at: shown.nodes.get(node.name) ?? { x: 0, y: 0 },
-			hidden: !shownNodes.get(node.name),
+			at: layout.value.nodes.get(node.name) ?? { x: 0, y: 0 },
+			filtered: !shownNodes.get(node.name),
 			dimmed: active !== null && !neighbours.has(node.name),
 		})),
 		links: links.map((link, index) => ({
 			link,
 			kind: drawnKind(link),
-			path: pathOf(shown.edges.get(index) ?? []),
-			hidden: !activeLinks.has(link),
+			path: pathOf(layout.value.edges.get(index) ?? []),
+			filtered: !activeLinks.has(link),
 			dimmed: active !== null && link.source.name !== active && link.target.name !== active,
 		})),
 	};
@@ -656,8 +465,6 @@ function measure(): void {
 
 let observer: ResizeObserver | undefined;
 
-watch(visible, relayout);
-
 onMounted(() => {
 	const element = root.value;
 	if (!element) return;
@@ -679,14 +486,14 @@ onMounted(() => {
 
 	measure();
 	if (svg.value) select(svg.value).call(zoomBehaviour);
-	void computeLayout().then((layout) => {
-		settle(layout);
+	void computeLayout().then((result) => {
+		layout.value = result;
+		fitView();
 		ready.value = true;
 	});
 });
 
 onBeforeUnmount(() => {
-	cancelAnimationFrame(raf);
 	observer?.disconnect();
 	document.removeEventListener('fullscreenchange', onFullscreenChange);
 	document.removeEventListener('keydown', onKeydown);
@@ -795,7 +602,7 @@ onBeforeUnmount(() => {
 						v-for="(edge, index) in view.links"
 						:key="index"
 						class="link"
-						:class="{ dimmed: edge.dimmed, hidden: edge.hidden }"
+						:class="{ dimmed: edge.dimmed, filtered: edge.filtered }"
 						:style="lineStyle(edge.kind)"
 						:d="edge.path"
 						:marker-end="`url(#dg-arrow-${edge.kind})`"
@@ -807,7 +614,7 @@ onBeforeUnmount(() => {
 						v-for="entry in view.nodes"
 						:key="entry.node.name"
 						class="node"
-						:class="{ dimmed: entry.dimmed, hidden: entry.hidden }"
+						:class="{ dimmed: entry.dimmed, filtered: entry.filtered }"
 						:style="tagStyles.get(primaryTag(entry.node))"
 						:transform="`translate(${entry.at.x},${entry.at.y})`"
 						@pointerenter="hovered = entry.node.name"
@@ -830,7 +637,7 @@ onBeforeUnmount(() => {
 		</div>
 
 		<figcaption class="status">
-			Showing {{ visible.nodes.length }} of {{ nodes.length }} repositories and
+			Highlighting {{ visible.nodes.length }} of {{ nodes.length }} repositories and
 			{{ visible.links.length }} of {{ links.length }} dependencies. Arrows run left to right,
 			from a repository to what it depends on. Scroll to zoom, drag the background to pan, hover
 			a repository to isolate it.
@@ -1021,18 +828,19 @@ onBeforeUnmount(() => {
 	font-size: 12px;
 }
 
+/* Before the hover rules, so that isolating a repository dims these further. */
+.node.filtered,
+.link.filtered {
+	opacity: 0.1;
+	pointer-events: none;
+}
+
 .node.dimmed {
 	opacity: 0.12;
 }
 
 .link.dimmed {
 	opacity: calc(var(--dg-link-opacity, 1) * 0.12);
-}
-
-.node.hidden,
-.link.hidden {
-	opacity: 0;
-	pointer-events: none;
 }
 
 /* Links ------------------------------------------------------------------ */
