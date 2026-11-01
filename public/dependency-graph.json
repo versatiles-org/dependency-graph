@@ -43,7 +43,7 @@
 		{
 			"name": "consortium",
 			"tags": ["ecosystem"],
-			"description": null,
+			"description": "Landing page and open letter for founding the VersaTiles consortium.",
 			"language": "Svelte",
 			"fork": false,
 			"archived": false
@@ -51,7 +51,7 @@
 		{
 			"name": "dependency-graph",
 			"tags": ["internal"],
-			"description": null,
+			"description": "How the VersaTiles repositories depend on each other, and which dependencies are out of date.",
 			"language": "TypeScript",
 			"fork": false,
 			"archived": false
@@ -67,7 +67,7 @@
 		{
 			"name": "elevation",
 			"tags": ["tile-production"],
-			"description": null,
+			"description": "Converts Copernicus elevation data into Terrarium-encoded tiles in VersaTiles containers.",
 			"language": "TypeScript",
 			"fork": false,
 			"archived": false
@@ -155,7 +155,7 @@
 		{
 			"name": "photon-stack",
 			"tags": ["ecosystem"],
-			"description": null,
+			"description": "Docker deployment of the Photon geocoder behind geocode.versatiles.org.",
 			"language": "Shell",
 			"fork": false,
 			"archived": false
@@ -283,7 +283,7 @@
 		{
 			"name": "versatiles-map-editor",
 			"tags": ["tools"],
-			"description": null,
+			"description": "Standalone, embeddable map editor for drawing and styling features on a VersaTiles map.",
 			"language": "TypeScript",
 			"fork": false,
 			"archived": false

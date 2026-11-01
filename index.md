@@ -60,7 +60,7 @@ Optional extras built on top of the core — libraries, editors, renderers and a
 | [versatiles-choro](https://github.com/versatiles-org/versatiles-choro)                         | Modular Docker-based pipeline for creating interactive choropleth maps                        | 3          | 0       |
 | [versatiles-glyphs-rs](https://github.com/versatiles-org/versatiles-glyphs-rs)                 | Rust implementation of a signed-distance-field (SDF) glyph renderer used in map rendering.    | 0          | 2       |
 | [versatiles-map-animator](https://github.com/versatiles-org/versatiles-map-animator)           | Browser-based editor for composing keyframe camera animations on a VersaTiles map.            | 2          | 0       |
-| [versatiles-map-editor](https://github.com/versatiles-org/versatiles-map-editor)               | —                                                                                             | 3          | 0       |
+| [versatiles-map-editor](https://github.com/versatiles-org/versatiles-map-editor)               | Standalone, embeddable map editor for drawing and styling features on a VersaTiles map.       | 3          | 0       |
 | [versatiles-studio](https://github.com/versatiles-org/versatiles-studio)                       | Cross-platform desktop application for opening, inspecting, styling and converting map tiles. | 5          | 1       |
 | [versatiles-svg-renderer](https://github.com/versatiles-org/versatiles-svg-renderer)           | renders maps as SVG                                                                           | 2          | 1       |
 
@@ -68,15 +68,15 @@ Optional extras built on top of the core — libraries, editors, renderers and a
 
 Pipelines that turn open data into the tilesets VersaTiles publishes. Needed only to build tiles rather than download them.
 
-| Repository                                                                             | Description                                                                      | Depends on | Used by |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ---------- | ------- |
-| [elevation](https://github.com/versatiles-org/elevation)                               | —                                                                                | 1          | 0       |
-| [landcover-vectors](https://github.com/versatiles-org/landcover-vectors)               | Generate landcover vector tiles from ESA Worldcover                              | 2          | 0       |
-| [opendem-gebco-bathymetry](https://github.com/versatiles-org/opendem-gebco-bathymetry) | Versatiles Container from GEBCO Bathymetry Data provided by OpenDEM              | 1          | 0       |
-| [orthophotos](https://github.com/versatiles-org/orthophotos)                           | Processing pipeline and hosting setup for global and regional orthophoto layers. | 4          | 0       |
-| [planetiler](https://github.com/versatiles-org/planetiler)                             | Flexible tool to build planet-scale vector tilesets from OpenStreetMap data fast | 0          | 2       |
-| [planetiler-shortbread](https://github.com/versatiles-org/planetiler-shortbread)       | Native Java Planetiler profile generating vector tiles in the Shortbread schema  | 1          | 0       |
-| [shortbread-tilemaker](https://github.com/versatiles-org/shortbread-tilemaker)         | Tilemaker configuration for generating Shortbread vector tiles.                  | 0          | 0       |
+| Repository                                                                             | Description                                                                               | Depends on | Used by |
+| -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------- | ------- |
+| [elevation](https://github.com/versatiles-org/elevation)                               | Converts Copernicus elevation data into Terrarium-encoded tiles in VersaTiles containers. | 1          | 0       |
+| [landcover-vectors](https://github.com/versatiles-org/landcover-vectors)               | Generate landcover vector tiles from ESA Worldcover                                       | 2          | 0       |
+| [opendem-gebco-bathymetry](https://github.com/versatiles-org/opendem-gebco-bathymetry) | Versatiles Container from GEBCO Bathymetry Data provided by OpenDEM                       | 1          | 0       |
+| [orthophotos](https://github.com/versatiles-org/orthophotos)                           | Processing pipeline and hosting setup for global and regional orthophoto layers.          | 4          | 0       |
+| [planetiler](https://github.com/versatiles-org/planetiler)                             | Flexible tool to build planet-scale vector tilesets from OpenStreetMap data fast          | 0          | 2       |
+| [planetiler-shortbread](https://github.com/versatiles-org/planetiler-shortbread)       | Native Java Planetiler profile generating vector tiles in the Shortbread schema           | 1          | 0       |
+| [shortbread-tilemaker](https://github.com/versatiles-org/shortbread-tilemaker)         | Tilemaker configuration for generating Shortbread vector tiles.                           | 0          | 0       |
 
 ### Ecosystem
 
@@ -85,10 +85,10 @@ What surrounds the software — documentation and specifications, the websites, 
 | Repository                                                                             | Description                                                                                   | Depends on | Used by |
 | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------- | ------- |
 | [.github](https://github.com/versatiles-org/.github)                                   | Shared GitHub workflows, templates, and issue configurations for all VersaTiles repositories. | 0          | 0       |
-| [consortium](https://github.com/versatiles-org/consortium)                             | —                                                                                             | 0          | 0       |
+| [consortium](https://github.com/versatiles-org/consortium)                             | Landing page and open letter for founding the VersaTiles consortium.                          | 0          | 0       |
 | [download.versatiles.org](https://github.com/versatiles-org/download.versatiles.org)   | Data download hub for VersaTiles datasets.                                                    | 3          | 0       |
 | [homebrew-versatiles](https://github.com/versatiles-org/homebrew-versatiles)           | Homebrew tap for installing VersaTiles CLI tools on macOS.                                    | 3          | 0       |
-| [photon-stack](https://github.com/versatiles-org/photon-stack)                         | —                                                                                             | 0          | 3       |
+| [photon-stack](https://github.com/versatiles-org/photon-stack)                         | Docker deployment of the Photon geocoder behind geocode.versatiles.org.                       | 0          | 3       |
 | [playground](https://github.com/versatiles-org/playground)                             | Interactive playground demonstrating how to use VersaTiles in web applications.               | 2          | 0       |
 | [shortbread-docs](https://github.com/versatiles-org/shortbread-docs)                   | Documentation of the Shortbread vector tile schema                                            | 0          | 0       |
 | [showcases](https://github.com/versatiles-org/showcases)                               | Gallery of projects using VersaTiles                                                          | 1          | 0       |
@@ -103,10 +103,10 @@ What surrounds the software — documentation and specifications, the websites, 
 
 Housekeeping for the maintainers. Nothing here is needed to use VersaTiles.
 
-| Repository                                                               | Description                                                                         | Depends on | Used by |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- | ---------- | ------- |
-| [dependency-graph](https://github.com/versatiles-org/dependency-graph)   | —                                                                                   | 0          | 0       |
-| [node-release-tool](https://github.com/versatiles-org/node-release-tool) | Helper tool for automating Node.js package releases across VersaTiles repositories. | 0          | 15      |
+| Repository                                                               | Description                                                                                   | Depends on | Used by |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- | ---------- | ------- |
+| [dependency-graph](https://github.com/versatiles-org/dependency-graph)   | How the VersaTiles repositories depend on each other, and which dependencies are out of date. | 0          | 0       |
+| [node-release-tool](https://github.com/versatiles-org/node-release-tool) | Helper tool for automating Node.js package releases across VersaTiles repositories.           | 0          | 15      |
 
 ## How each link is declared
 
