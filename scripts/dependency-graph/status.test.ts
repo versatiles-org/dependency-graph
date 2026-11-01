@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { assess, type Usage } from './drift';
 import { buildStatusSnapshot, renderStatusJson } from './status';
 
-const now = new Date('2026-11-01T12:00:00Z');
+const options = { org: 'versatiles-org', now: new Date('2026-11-01T12:00:00Z') };
 
 const usage = (consumer: string): Usage => ({
 	ecosystem: 'npm',
@@ -26,13 +26,16 @@ const collected = () =>
 
 describe('buildStatusSnapshot', () => {
 	it('records when the data was collected, and the report', async () => {
-		const snapshot = await buildStatusSnapshot(collected, now);
+		const snapshot = await buildStatusSnapshot(collected, options);
 		expect(snapshot.generatedAt).toBe('2026-11-01T12:00:00.000Z');
 		expect(snapshot.drift).toMatchObject({ status: 'ok', data: { totals: { usages: 2 } } });
 	});
 
 	it('passes the rank on to the update order', async () => {
-		const snapshot = await buildStatusSnapshot(collected, now, (repo) => (repo === 'b' ? 0 : 1));
+		const snapshot = await buildStatusSnapshot(collected, {
+			...options,
+			rank: (repo) => (repo === 'b' ? 0 : 1),
+		});
 		if (snapshot.drift.status !== 'ok') throw new Error('expected a report');
 		expect(snapshot.drift.data.dependents.map((entry) => entry.consumer)).toEqual(['b', 'a']);
 	});
@@ -40,9 +43,10 @@ describe('buildStatusSnapshot', () => {
 	it('records a failure instead of passing it on', async () => {
 		const snapshot = await buildStatusSnapshot(
 			() => Promise.reject(new Error('503 for https://registry.npmjs.org/x')),
-			now,
+			options,
 		);
 		expect(snapshot).toEqual({
+			org: 'versatiles-org',
 			generatedAt: '2026-11-01T12:00:00.000Z',
 			drift: { status: 'failed', error: '503 for https://registry.npmjs.org/x' },
 		});
@@ -51,7 +55,7 @@ describe('buildStatusSnapshot', () => {
 
 describe('renderStatusJson', () => {
 	it('writes everything the snapshot holds, ending in a newline', async () => {
-		const snapshot = await buildStatusSnapshot(collected, now);
+		const snapshot = await buildStatusSnapshot(collected, options);
 		const json = renderStatusJson(snapshot);
 		expect(JSON.parse(json)).toEqual(snapshot);
 		expect(json.endsWith('}\n')).toBe(true);

@@ -26,6 +26,7 @@ import { dirname, posix } from 'path';
 import { styleText } from 'util';
 import semver from 'semver';
 import type { NameMaps, RepoFile } from './collect';
+import { daysAgo as age } from './status-view';
 
 export type Ecosystem = 'npm' | 'cargo';
 
@@ -654,12 +655,6 @@ const DEPLOYMENT_STYLE: Record<
 
 function pad(text: string, width: number): string {
 	return text + ' '.repeat(Math.max(0, width - [...text].length));
-}
-
-function age(date: string, now: Date): string {
-	const days = Math.floor((now.getTime() - new Date(date).getTime()) / 86_400_000);
-	if (days <= 0) return 'today';
-	return days === 1 ? '1 day ago' : `${days} days ago`;
 }
 
 export interface ReportOptions {

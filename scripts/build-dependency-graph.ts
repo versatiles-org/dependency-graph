@@ -272,7 +272,11 @@ async function main(): Promise<void> {
 			(stale.length === 0 ? ' (unchanged)' : `, updated ${stale.length} file(s)`),
 	);
 
-	const snapshot = await buildStatusSnapshot(collectVersions, new Date(), rank);
+	const snapshot = await buildStatusSnapshot(collectVersions, {
+		org: config.org,
+		now: new Date(),
+		rank,
+	});
 	writeFileSync(resolve(ROOT, TARGET_STATUS), renderStatusJson(snapshot));
 	if (snapshot.drift.status === 'failed') {
 		console.warn(`[dependency-graph] status: versions not checked: ${snapshot.drift.error}`);

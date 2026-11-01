@@ -15,6 +15,8 @@ import { buildDriftReport, type DriftReport, type DriftResult } from './drift';
 export type StatusSection<T> = { status: 'ok'; data: T } | { status: 'failed'; error: string };
 
 export interface StatusSnapshot {
+	/** The GitHub organisation the repository names belong to. */
+	org: string;
 	/** When the data was collected, as an ISO date. */
 	generatedAt: string;
 	drift: StatusSection<DriftReport>;
@@ -22,8 +24,7 @@ export interface StatusSnapshot {
 
 export async function buildStatusSnapshot(
 	collectDrift: () => Promise<DriftResult>,
-	now: Date,
-	rank?: (repo: string) => number,
+	{ org, now, rank }: { org: string; now: Date; rank?: (repo: string) => number },
 ): Promise<StatusSnapshot> {
 	let drift: StatusSection<DriftReport>;
 	try {
@@ -31,7 +32,7 @@ export async function buildStatusSnapshot(
 	} catch (error) {
 		drift = { status: 'failed', error: error instanceof Error ? error.message : String(error) };
 	}
-	return { generatedAt: now.toISOString(), drift };
+	return { org, generatedAt: now.toISOString(), drift };
 }
 
 export function renderStatusJson(snapshot: StatusSnapshot): string {

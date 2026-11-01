@@ -16,6 +16,7 @@
 		"scripts/**/*.ts",
 		"vitest.config.ts",
 		"dependency_graph.data.ts",
+		"status.data.ts",
 		".vitepress/**/*.ts",
 		".vitepress/**/*.mts",
 		".vitepress/**/*.d.ts",
