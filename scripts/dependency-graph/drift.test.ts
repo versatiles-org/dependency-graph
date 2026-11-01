@@ -582,7 +582,7 @@ describe('renderDrift', () => {
 		const findings = [assess(usage({ installed: '6.0.3' }), release('6.0.3'))];
 		const result = { findings, releases: new Map([['npm:@versatiles/style', release('6.0.3')]]) };
 		expect(renderDrift(result, { color: false, now, onlyOutdated: true })).toBe(
-			'1 packages, 1 usages: 1 current',
+			'1 package, 1 usage: 1 current',
 		);
 		expect(renderDrift(result, { color: true, now, onlyOutdated: false })).toContain('\u001b[');
 	});

@@ -235,7 +235,7 @@ Build scripts or runtime code fetch release assets or raw files from another rep
 
 A GitHub Actions workflow uses an action, reusable workflow or checkout of another repository.
 
-::: details Where these 1 links come from
+::: details Where this link comes from
 
 | From                  | To         | Found                       | Source                                                                                                                     |
 | --------------------- | ---------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |

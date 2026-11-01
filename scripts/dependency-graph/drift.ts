@@ -1004,13 +1004,15 @@ export function renderDrift(result: DriftResult, options: ReportOptions): string
 		lines.push('');
 	}
 
+	const counted = (count: number, noun: string): string =>
+		`${count} ${noun}${count === 1 ? '' : 's'}`;
 	const { usages, byStatus, deploymentsBehind } = report.totals;
 	const summary = STATUS_ORDER.filter((status) => byStatus[status]).map(
 		(status) => `${byStatus[status]} ${status === 'range' ? 'range excludes latest' : status}`,
 	);
 	if (deploymentsBehind > 0) summary.push(`${deploymentsBehind} deployed behind`);
 	lines.push(
-		`${report.packages.length} packages, ${usages} usages` +
+		`${counted(report.packages.length, 'package')}, ${counted(usages, 'usage')}` +
 			(summary.length ? `: ${summary.join(', ')}` : ''),
 	);
 	return lines.join('\n');

@@ -126,7 +126,11 @@ const copyLabel = (key: string): string =>
 						<li v-for="status in legend" :key="status" :class="`is-${status}`">
 							<span class="mark" aria-hidden="true">{{ STATUS[status].mark }}</span>
 							<strong>{{ report.totals.byStatus[status] }}</strong>
-							{{ STATUS[status].count }}
+							{{
+								report.totals.byStatus[status] === 1
+									? STATUS[status].label.toLowerCase()
+									: STATUS[status].count
+							}}
 						</li>
 						<li>
 							<strong>{{ report.totals.deploymentsBehind }}</strong>

@@ -161,7 +161,12 @@ export function renderPage({ graph, branches, skipped }: RenderOptions): string 
 		const meta = EDGE_KIND_META[kind];
 		lines.push(`### ${meta.title}`, '', meta.summary, '');
 
-		lines.push(`::: details Where these ${edges.length} links come from`, '');
+		lines.push(
+			edges.length === 1
+				? '::: details Where this link comes from'
+				: `::: details Where these ${edges.length} links come from`,
+			'',
+		);
 		lines.push(
 			...table(
 				['From', 'To', 'Found', 'Source'],

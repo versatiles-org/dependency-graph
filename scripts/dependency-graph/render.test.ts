@@ -146,7 +146,7 @@ describe('renderPage', () => {
 	});
 
 	it('puts the evidence behind a details block, not in the way', () => {
-		expect(page).toContain('::: details Where these 1 links come from');
+		expect(page).toContain('::: details Where this link comes from');
 	});
 
 	it('says which repositories are left out and why', () => {
