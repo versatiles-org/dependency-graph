@@ -35,6 +35,44 @@ export async function buildStatusSnapshot(
 	return { org, generatedAt: now.toISOString(), drift };
 }
 
+/** Listed against the type, so that a new field cannot be forgotten here. */
+const REPORT_FIELDS = {
+	packages: true,
+	dependents: true,
+	deployments: true,
+	pins: true,
+	totals: true,
+} satisfies Record<keyof DriftReport, true>;
+
+/**
+ * A snapshot read back from disk, or null if this version of the code cannot use
+ * it. The file is not committed, so it can easily outlive a change to its shape.
+ */
+export function readStatusSnapshot(text: string): StatusSnapshot | null {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(text);
+	} catch {
+		return null;
+	}
+	if (typeof parsed !== 'object' || parsed === null) return null;
+	const { org, generatedAt, drift } = parsed as Partial<Record<keyof StatusSnapshot, unknown>>;
+	if (typeof org !== 'string' || typeof generatedAt !== 'string') return null;
+	if (typeof drift !== 'object' || drift === null) return null;
+
+	const section = drift as { status?: unknown; data?: unknown; error?: unknown };
+	if (section.status === 'failed' && typeof section.error === 'string') {
+		return parsed as StatusSnapshot;
+	}
+	if (section.status !== 'ok' || typeof section.data !== 'object' || section.data === null) {
+		return null;
+	}
+	const data = section.data;
+	return Object.keys(REPORT_FIELDS).every((field) => field in data)
+		? (parsed as StatusSnapshot)
+		: null;
+}
+
 export function renderStatusJson(snapshot: StatusSnapshot): string {
 	return `${JSON.stringify(snapshot, null, '\t')}\n`;
 }

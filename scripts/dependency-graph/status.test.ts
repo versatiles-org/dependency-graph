@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assess, type Usage } from './drift';
-import { buildStatusSnapshot, renderStatusJson } from './status';
+import { buildStatusSnapshot, readStatusSnapshot, renderStatusJson } from './status';
 
 const options = { org: 'versatiles-org', now: new Date('2026-11-01T12:00:00Z') };
 
@@ -50,6 +50,40 @@ describe('buildStatusSnapshot', () => {
 			generatedAt: '2026-11-01T12:00:00.000Z',
 			drift: { status: 'failed', error: '503 for https://registry.npmjs.org/x' },
 		});
+	});
+});
+
+describe('readStatusSnapshot', () => {
+	it('reads back what was written, whether it succeeded or failed', async () => {
+		const written = await buildStatusSnapshot(collected, options);
+		expect(readStatusSnapshot(renderStatusJson(written))).toEqual(written);
+
+		const failed = await buildStatusSnapshot(() => Promise.reject(new Error('503')), options);
+		expect(readStatusSnapshot(renderStatusJson(failed))).toEqual(failed);
+	});
+
+	it('refuses a report from before a field was added', async () => {
+		const written = await buildStatusSnapshot(collected, options);
+		if (written.drift.status !== 'ok') throw new Error('expected a report');
+		const older: Partial<typeof written.drift.data> = { ...written.drift.data };
+		delete older.pins;
+		const text = JSON.stringify({ ...written, drift: { status: 'ok', data: older } });
+		expect(readStatusSnapshot(text)).toBeNull();
+	});
+
+	it('refuses what is not a snapshot at all', () => {
+		for (const text of [
+			'not json',
+			'null',
+			'[]',
+			'{}',
+			'{"org":"o","generatedAt":"d"}',
+			'{"org":"o","generatedAt":"d","drift":{"status":"ok"}}',
+			'{"org":"o","generatedAt":"d","drift":{"status":"failed"}}',
+			'{"org":"o","generatedAt":"d","drift":{"status":"other","data":{}}}',
+		]) {
+			expect(readStatusSnapshot(text)).toBeNull();
+		}
 	});
 });
 
