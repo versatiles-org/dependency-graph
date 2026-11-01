@@ -3,8 +3,9 @@
  * npm packages and crates than the one most recently published.
  *
  * This is a maintainer's tool, not documentation. Versions move with every
- * release and every lockfile refresh, so nothing here is written to the
- * committed page — `npm run sync:deps -- --drift` prints a report and exits.
+ * release and every lockfile refresh, so nothing here is committed: it reaches
+ * the status page through a snapshot written at build time, and
+ * `npm run sync:deps -- --drift` prints the same report in the terminal.
  *
  * For every place a repository depends on an organisation package, three
  * versions are compared:

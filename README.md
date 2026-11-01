@@ -4,9 +4,13 @@ How the repositories of the [versatiles-org](https://github.com/versatiles-org) 
 
 The site is published at <https://versatiles.org/dependency-graph/>. The full record is available as [`dependency-graph.json`](https://versatiles.org/dependency-graph/dependency-graph.json).
 
+The [status page](https://versatiles.org/dependency-graph/status/) is for people working on VersaTiles. It shows which repositories use an outdated release of the project's own packages, in the order to update them, and whether deployments run the latest releases. Its data is available as [`status.json`](https://versatiles.org/dependency-graph/status.json).
+
 ## How it updates
 
-The workflow in `.github/workflows/ci.yml` runs once a day, and on every push to `main`. It reads the public repositories, rebuilds the page and the JSON, commits them if the data changed, and deploys the site.
+The workflow in `.github/workflows/ci.yml` runs every six hours, and on every push to `main`. It reads the public repositories, rebuilds the graph page, its JSON and the status snapshot, commits the graph if its data changed, and deploys the site.
+
+The status snapshot changes with every release, so it is deployed but never committed. If it can't be collected, the graph still updates and the status page shows the error.
 
 To correct or extend the graph, edit `scripts/dependency-graph.yaml`.
 
@@ -15,8 +19,8 @@ To correct or extend the graph, edit `scripts/dependency-graph.yaml`.
 ```sh
 npm ci
 npm run dev            # preview the site
-npm run sync:deps      # regenerate index.md and public/dependency-graph.json
-npm run deps:drift     # report outdated versions (not committed)
+npm run sync:deps      # regenerate index.md, public/dependency-graph.json and public/status.json
+npm run deps:drift     # print the outdated versions in the terminal
 npm run check          # format, lint, type-check, test and build
 ```
 

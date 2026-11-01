@@ -21,9 +21,22 @@ export default defineConfig({
 			},
 		},
 	},
+	// Everything that names the page it is on, so a second page cannot claim to be the first.
+	transformHead({ pageData }) {
+		const url = `${SITE_URL}${pageData.relativePath.replace(/(^|\/)index\.md$/, '$1').replace(/\.md$/, '.html')}`;
+		const { title, description } = pageData.frontmatter as {
+			title?: string;
+			description?: string;
+		};
+		return [
+			['link', { rel: 'canonical', href: url }],
+			['meta', { property: 'og:url', content: url }],
+			['meta', { property: 'og:title', content: title ?? SITE_TITLE }],
+			['meta', { property: 'og:description', content: description ?? SITE_DESCRIPTION }],
+		];
+	},
 	// VitePress does not apply `base` to head entries, so these carry it themselves.
 	head: [
-		['link', { rel: 'canonical', href: SITE_URL }],
 		[
 			'link',
 			{
@@ -51,9 +64,6 @@ export default defineConfig({
 		['meta', { name: 'twitter:card', content: 'summary_large_image' }],
 		['meta', { property: 'og:type', content: 'website' }],
 		['meta', { property: 'og:site_name', content: 'VersaTiles' }],
-		['meta', { property: 'og:url', content: SITE_URL }],
-		['meta', { property: 'og:title', content: SITE_TITLE }],
-		['meta', { property: 'og:description', content: SITE_DESCRIPTION }],
 		['meta', { property: 'og:image', content: `${SITE_URL}versatiles-social.png` }],
 		['meta', { property: 'og:image:type', content: 'image/png' }],
 		['meta', { property: 'og:image:width', content: '1200' }],
@@ -64,6 +74,8 @@ export default defineConfig({
 		logo: '/versatiles.svg',
 		logoLink: 'https://versatiles.org',
 		nav: [
+			{ text: 'Graph', link: '/', activeMatch: '^/$' },
+			{ text: 'Status', link: '/status/', activeMatch: '^/status/' },
 			{ text: 'Website', link: 'https://versatiles.org' },
 			{ text: 'Documentation', link: 'https://docs.versatiles.org' },
 		],

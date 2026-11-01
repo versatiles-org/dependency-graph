@@ -1,16 +1,18 @@
 name: CI
 
-# The graph describes the whole organisation, so it goes stale whenever any
-# other repository changes. This workflow therefore rebuilds it once a day as
-# well as on every push, and deploys in the same run: a push made with
-# GITHUB_TOKEN starts no workflow, so a later run could not publish the result.
+# The graph and the status page describe the whole organisation, so they go
+# stale whenever any other repository changes or releases. This workflow
+# therefore rebuilds them every six hours as well as on every push, and deploys
+# in the same run: a push made with GITHUB_TOKEN starts no workflow, so a later
+# run could not publish the result. The status snapshot is not committed, so
+# every run deploys, even when the graph itself has not changed.
 
 on:
   push:
     branches: [main]
   pull_request:
   schedule:
-    - cron: '0 4 * * *'
+    - cron: '0 */6 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -23,8 +25,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    outputs:
-      changed: ${{ steps.commit.outputs.changed }}
 
     steps:
       - name: Checkout repository
@@ -58,20 +58,17 @@ jobs:
         run: npm run build
 
       - name: Commit and push
-        id: commit
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           if [ -z "$(git status --porcelain index.md public/dependency-graph.json)" ]; then
             echo "no changes"
-            echo "changed=false" >>"$GITHUB_OUTPUT"
             exit 0
           fi
           git add index.md public/dependency-graph.json
           git commit -m 'update repository dependency graph'
           git push
-          echo "changed=true" >>"$GITHUB_OUTPUT"
         shell: bash
 
       - name: Add .nojekyll
@@ -86,10 +83,7 @@ jobs:
   deploy:
     name: Deploy
     needs: [build]
-    # A daily run without new data has nothing to publish.
-    if: >-
-      github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
-      (github.event_name != 'schedule' || needs.build.outputs.changed == 'true')
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
 
     permissions:
       pages: write
