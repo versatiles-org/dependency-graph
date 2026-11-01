@@ -568,6 +568,11 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 </template>
 
 <style scoped>
+/*
+ * Only what already belonged together is nested, such as `.legend li`. Moving a
+ * class of its own under a parent would raise its specificity and could change
+ * which rule wins.
+ */
 .status-page {
 	--st-range: var(--vp-c-danger-1);
 	--st-stale-lock: var(--vp-c-warning-1);
@@ -589,16 +594,15 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 	padding: 32px 24px 96px;
 	font-size: 14px;
 	line-height: 1.5;
-}
 
-/* A plain descendant selector, so that `.dark` stays a real ancestor under scoped CSS. */
-.dark .status-page {
-	--st-lane-0: #c49bf0;
-	--st-lane-1: #6db8f0;
-	--st-lane-2: #f0a060;
-	--st-lane-3: #5fd0ac;
-	--st-lane-4: #f08aa8;
-	--st-lane-5: #a3acf0;
+	.dark & {
+		--st-lane-0: #c49bf0;
+		--st-lane-1: #6db8f0;
+		--st-lane-2: #f0a060;
+		--st-lane-3: #5fd0ac;
+		--st-lane-4: #f08aa8;
+		--st-lane-5: #a3acf0;
+	}
 }
 
 h1 {
@@ -628,11 +632,11 @@ h1 {
 a {
 	color: var(--vp-c-brand-1);
 	text-decoration: none;
-}
 
-a:hover {
-	color: var(--vp-c-brand-2);
-	text-decoration: underline;
+	&:hover {
+		color: var(--vp-c-brand-2);
+		text-decoration: underline;
+	}
 }
 
 :is(a, button, input, summary, .scroll):focus-visible {
@@ -685,11 +689,11 @@ h2 {
 .snapshot {
 	margin: 0;
 	color: var(--vp-c-text-2);
-}
 
-.snapshot.stale {
-	color: var(--vp-c-warning-1);
-	font-weight: 500;
+	&.stale {
+		color: var(--vp-c-warning-1);
+		font-weight: 500;
+	}
 }
 
 .notice {
@@ -697,14 +701,14 @@ h2 {
 	padding: 10px 14px;
 	border-left: 3px solid var(--vp-c-divider);
 	background: var(--vp-c-bg-soft);
-}
 
-.notice.failed {
-	border-left-color: var(--vp-c-danger-1);
-}
+	&.failed {
+		border-left-color: var(--vp-c-danger-1);
+	}
 
-.notice code {
-	overflow-wrap: anywhere;
+	code {
+		overflow-wrap: anywhere;
+	}
 }
 
 .empty {
@@ -737,19 +741,19 @@ h2 {
 	margin: 10px 0 0;
 	padding: 0;
 	list-style: none;
-}
 
-.legend li {
-	color: var(--vp-c-text-2);
-}
+	li {
+		color: var(--vp-c-text-2);
+	}
 
-.legend strong {
-	color: var(--vp-c-text-1);
-	font-weight: 600;
-}
+	strong {
+		color: var(--vp-c-text-1);
+		font-weight: 600;
+	}
 
-.legend .mark {
-	margin-right: 2px;
+	.mark {
+		margin-right: 2px;
+	}
 }
 
 .mark {
@@ -776,17 +780,17 @@ h2 {
 	align-items: center;
 	gap: 8px;
 	color: var(--vp-c-text-2);
-}
 
-.search input {
-	flex: 1;
-	min-width: 0;
-	padding: 4px 10px;
-	border: 1px solid var(--vp-c-divider);
-	border-radius: 6px;
-	background: var(--vp-c-bg);
-	color: var(--vp-c-text-1);
-	font-size: 14px;
+	input {
+		flex: 1;
+		min-width: 0;
+		padding: 4px 10px;
+		border: 1px solid var(--vp-c-divider);
+		border-radius: 6px;
+		background: var(--vp-c-bg);
+		color: var(--vp-c-text-1);
+		font-size: 14px;
+	}
 }
 
 .toggle {
@@ -796,10 +800,10 @@ h2 {
 	color: var(--vp-c-text-2);
 	font-size: 13px;
 	cursor: pointer;
-}
 
-.toggle input {
-	accent-color: var(--vp-c-brand-1);
+	input {
+		accent-color: var(--vp-c-brand-1);
+	}
 }
 
 /* Tables ----------------------------------------------------------------- */
@@ -860,12 +864,12 @@ thead th {
 	color: var(--vp-c-text-2);
 	font-size: 13px;
 	list-style: none;
-}
 
-.graph-key li {
-	display: flex;
-	align-items: center;
-	gap: 8px;
+	li {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
 }
 
 .graph-key-dash {
@@ -887,11 +891,11 @@ thead th {
 	color: var(--vp-c-text-2);
 	font-size: 13px;
 	font-weight: 500;
-}
 
-.graph-head span {
-	position: absolute;
-	top: 6px;
+	span {
+		position: absolute;
+		top: 6px;
+	}
 }
 
 .graph-group {
@@ -908,14 +912,27 @@ thead th {
 	position: absolute;
 	inset-inline: 0;
 	border-bottom: 1px solid var(--vp-c-divider);
-}
 
-.graph-row.banded {
-	background: var(--vp-c-bg-soft);
-}
+	&.banded {
+		background: var(--vp-c-bg-soft);
+	}
 
-.graph-row.active {
-	background: var(--vp-c-brand-soft);
+	&.active {
+		background: var(--vp-c-brand-soft);
+	}
+
+	> span {
+		position: absolute;
+		pointer-events: none;
+	}
+
+	a {
+		pointer-events: auto;
+	}
+
+	&.faint > span {
+		opacity: 0.35;
+	}
 }
 
 /* Behind everything else in the row, so that its links stay links. */
@@ -924,23 +941,10 @@ thead th {
 	inset: 0;
 	width: 100%;
 	cursor: pointer;
-}
 
-.graph-row-select:focus-visible {
-	outline-offset: -2px;
-}
-
-.graph-row > span {
-	position: absolute;
-	pointer-events: none;
-}
-
-.graph-row a {
-	pointer-events: auto;
-}
-
-.graph-row.faint > span {
-	opacity: 0.35;
+	&:focus-visible {
+		outline-offset: -2px;
+	}
 }
 
 .row-position {
@@ -959,14 +963,14 @@ thead th {
 	left: 36px;
 	width: 252px;
 	line-height: 18px;
-}
 
-.row-name a {
-	display: block;
-	overflow: hidden;
-	font-weight: 600;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	a {
+		display: block;
+		overflow: hidden;
+		font-weight: 600;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 }
 
 .row-packages {
@@ -1002,12 +1006,14 @@ thead th {
 	font-weight: 500;
 }
 
-.row-update a {
-	font-weight: 600;
-}
+.row-update {
+	a {
+		font-weight: 600;
+	}
 
-.row-update .dev {
-	margin-left: 0;
+	.dev {
+		margin-left: 0;
+	}
 }
 
 .behind-major {
@@ -1027,6 +1033,10 @@ thead th {
 	top: 0;
 	overflow: visible;
 	pointer-events: none;
+
+	.faint {
+		opacity: 0.15;
+	}
 }
 
 .lane-halo {
@@ -1043,10 +1053,10 @@ thead th {
 	stroke: var(--lane);
 	stroke-linecap: round;
 	stroke-width: 3;
-}
 
-.lane-line.dashed {
-	stroke-dasharray: 6 4;
+	&.dashed {
+		stroke-dasharray: 6 4;
+	}
 }
 
 .lane-head {
@@ -1063,10 +1073,6 @@ thead th {
 	font-weight: 600;
 }
 
-.graph-lines .faint {
-	opacity: 0.15;
-}
-
 /* Packages --------------------------------------------------------------- */
 
 .packages {
@@ -1075,6 +1081,14 @@ thead th {
 
 details {
 	border-bottom: 1px solid var(--vp-c-divider);
+
+	.scroll {
+		margin: 0 0 12px 1.9em;
+	}
+
+	tr:last-child td {
+		border-bottom: 0;
+	}
 }
 
 summary {
@@ -1084,10 +1098,10 @@ summary {
 	align-items: baseline;
 	padding: 7px 0;
 	cursor: pointer;
-}
 
-summary:hover .name {
-	color: var(--vp-c-brand-1);
+	&:hover .name {
+		color: var(--vp-c-brand-1);
+	}
 }
 
 .name {
@@ -1112,14 +1126,6 @@ summary:hover .name {
 	color: var(--vp-c-text-2);
 }
 
-details .scroll {
-	margin: 0 0 12px 1.9em;
-}
-
-details tr:last-child td {
-	border-bottom: 0;
-}
-
 /* Deployments ------------------------------------------------------------ */
 
 .deployment-name {
@@ -1129,10 +1135,10 @@ details tr:last-child td {
 	align-items: baseline;
 	margin: 8px 0;
 	font-weight: 600;
-}
 
-.deployment-name .dim {
-	font-weight: 400;
+	.dim {
+		font-weight: 400;
+	}
 }
 
 @media (max-width: 720px) {
