@@ -7,11 +7,11 @@ import {
 	filterDrift,
 	formatUtc,
 	hoursAgo,
-	isCommand,
 	isDev,
 	isStale,
 	pinLocation,
 } from '../../../scripts/dependency-graph/status-view';
+import { buildQueueGraph, type GraphEdge } from '../../../scripts/dependency-graph/queue-graph';
 
 /** The same marks as the terminal report, so colour never has to speak alone. */
 const STATUS: Record<Status, { mark: string; label: string; count: string }> = {
@@ -72,27 +72,40 @@ const legend = computed(() =>
 const repoUrl = (repo: string): string => `https://github.com/${data?.org}/${repo}`;
 const fileUrl = (repo: string, path: string): string => `${repoUrl(repo)}/blob/HEAD/${path}`;
 
-/** What the most recently pressed copy button says for a moment. */
-const copyResult = ref<{ key: string; label: string } | null>(null);
-let copyTimer: ReturnType<typeof setTimeout> | undefined;
+const graph = computed(() => buildQueueGraph(filtered.value.queue, report?.publishes ?? {}));
 
-async function copy(key: string, text: string): Promise<void> {
-	let label = 'Copied';
-	try {
-		await navigator.clipboard.writeText(text);
-	} catch {
-		// Refused, or missing outside HTTPS. The command stays on screen to select by hand.
-		label = 'Copy failed';
-	}
-	copyResult.value = { key, label };
-	clearTimeout(copyTimer);
-	copyTimer = setTimeout(() => {
-		copyResult.value = null;
-	}, 1500);
-}
+/* Where the columns start, around a graph as wide as it has lanes. */
+const GRAPH_LEFT = 296;
+const behindLeft = computed(() => GRAPH_LEFT + graph.value.width);
+const updateLeft = computed(() => behindLeft.value + 88);
+const graphMinWidth = computed(() => updateLeft.value + 240);
 
-const copyLabel = (key: string): string =>
-	copyResult.value?.key === key ? copyResult.value.label : 'Copy';
+/** Pointing at a row isolates its lines, and clicking keeps them isolated. */
+const pinned = ref<string | null>(null);
+const hovered = ref<string | null>(null);
+const active = computed(() => {
+	const repo = pinned.value ?? hovered.value;
+	// The row may have been filtered away since.
+	return graph.value.rows.some((row) => row.repo === repo) ? repo : null;
+});
+const edgeLit = (edge: GraphEdge): boolean =>
+	active.value === null || edge.consumer === active.value || edge.provider === active.value;
+const laneLit = (lane: { repo: string; edges: GraphEdge[] }): boolean =>
+	active.value === lane.repo || lane.edges.some(edgeLit);
+const rowLit = (repo: string): boolean =>
+	active.value === null ||
+	graph.value.lanes.some((lane) =>
+		lane.edges.some(
+			(edge) => edgeLit(edge) && (edge.consumer === repo || edge.provider === repo),
+		),
+	);
+const togglePin = (repo: string): void => {
+	pinned.value = pinned.value === repo ? null : repo;
+};
+
+/** The first package ends up on top: later ones are painted first, each halo under its lines. */
+const paintOrder = computed(() => [...graph.value.lanes].reverse());
+const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 </script>
 
 <template>
@@ -164,77 +177,171 @@ const copyLabel = (key: string): string =>
 				</div>
 
 				<section>
-					<h2>Update queue</h2>
+					<h2>Outdated dependencies</h2>
 					<p class="hint">
 						Work from the top. Each repository comes after the ones it builds on, so nothing
 						has to be updated twice.
 					</p>
-					<div v-if="filtered.queue.length > 0" class="scroll" tabindex="0">
-						<table>
-							<thead>
-								<tr>
-									<th class="position" scope="col">
-										<span class="sr-only">Position</span>
-									</th>
-									<th scope="col">Repository</th>
-									<th scope="col">Package</th>
-									<th scope="col">Update</th>
-									<th scope="col">Range</th>
-									<th scope="col">Behind</th>
-									<th scope="col">Fix</th>
-								</tr>
-							</thead>
-							<tbody v-for="entry in filtered.queue" :key="entry.consumer">
-								<tr
-									v-for="(row, index) in entry.outdated"
-									:key="`${row.name} ${row.path} ${row.section}`"
-								>
-									<td v-if="index === 0" class="position" :rowspan="entry.outdated.length">
-										{{ entry.position }}
-									</td>
-									<th
-										v-if="index === 0"
-										class="repo"
-										scope="rowgroup"
-										:rowspan="entry.outdated.length"
+					<ul class="graph-key">
+						<li>
+							Each colour is one package. A line curves up into the package it depends on.
+						</li>
+						<li>
+							<svg width="32" height="8" viewBox="0 0 32 8" aria-hidden="true">
+								<path d="M 0 4 L 32 4" class="graph-key-dash" />
+							</svg>
+							Development dependency
+						</li>
+						<li>Point at a row to isolate its lines, or click to keep them isolated.</li>
+					</ul>
+					<div v-if="graph.rows.length > 0" class="scroll" tabindex="0">
+						<div
+							class="graph"
+							:style="{ height: `${graph.height}px`, minWidth: `${graphMinWidth}px` }"
+						>
+							<div class="graph-head">
+								<span :style="{ left: '36px' }">Repository and package</span>
+								<span :style="{ left: `${GRAPH_LEFT}px` }">Dependencies</span>
+								<span :style="{ left: `${behindLeft}px` }">Behind</span>
+								<span :style="{ left: `${updateLeft}px` }">Update</span>
+							</div>
+							<h3 v-if="graph.hasReleases" class="graph-group" :style="{ top: '40px' }">
+								Latest releases
+							</h3>
+							<h3 class="graph-group" :style="{ top: `${graph.queueLabelTop}px` }">
+								Repositories to update, in order
+							</h3>
+
+							<div
+								v-for="(row, index) in graph.rows"
+								:key="row.repo"
+								class="graph-row"
+								:class="{
+									'in-queue': row.position !== null,
+									banded: row.position !== null && index % 2 === 0,
+									active: active === row.repo,
+									faint: !rowLit(row.repo),
+								}"
+								:style="{ top: `${row.top}px`, height: `${row.height}px` }"
+								@mouseenter="hovered = row.repo"
+								@mouseleave="hovered = null"
+							>
+								<button
+									type="button"
+									class="graph-row-select"
+									:aria-pressed="pinned === row.repo"
+									:aria-label="`Isolate the lines of ${row.repo}`"
+									@click="togglePin(row.repo)"
+									@focus="hovered = row.repo"
+									@blur="hovered = null"
+								/>
+								<span class="row-position">{{ row.position }}</span>
+								<span class="row-name">
+									<a
+										:href="repoUrl(row.repo)"
+										:style="
+											row.lane !== null ? { color: laneColor(row.lane) } : undefined
+										"
+										>{{ row.repo }}</a
 									>
-										<a :href="repoUrl(entry.consumer)">{{ entry.consumer }}</a>
-									</th>
-									<td class="package">
-										<span
-											class="mark"
-											:class="`is-${row.status}`"
-											:title="STATUS[row.status].label"
+									<span class="row-packages" :title="row.packages">{{
+										row.packages
+									}}</span>
+								</span>
+								<span
+									v-if="row.latest"
+									class="row-summary"
+									:style="{ left: `${behindLeft}px` }"
+								>
+									Latest <span class="mono">{{ row.latest }}</span
+									>, {{ row.behindCount }}
+									{{ row.behindCount === 1 ? 'repository' : 'repositories' }} behind
+								</span>
+								<template
+									v-for="detail in row.details"
+									:key="`${detail.name} ${detail.path} ${detail.section}`"
+								>
+									<span
+										class="row-behind"
+										:class="[`is-${detail.status}`, `behind-${detail.behind}`]"
+										:style="{ left: `${behindLeft}px`, top: `${detail.y}px` }"
+										:title="STATUS[detail.status].label"
+									>
+										<span class="mark" aria-hidden="true">{{
+											STATUS[detail.status].mark
+										}}</span>
+										{{ detail.behind }}
+									</span>
+									<span
+										class="row-update"
+										:style="{ left: `${updateLeft}px`, top: `${detail.y}px` }"
+									>
+										<a
+											:href="fileUrl(detail.consumer, detail.path)"
+											:title="`${detail.name} in ${detail.path}`"
+											:style="{ color: laneColor(detail.lane) }"
+											>{{ graph.lanes[detail.lane].label }}</a
 										>
-											{{ STATUS[row.status].mark }}
-										</span>
-										<a :href="fileUrl(row.consumer, row.path)">{{ row.name }}</a>
-										<span v-if="isDev(row)" class="dev">dev</span>
-										<span v-if="row.path.includes('/')" class="path">{{ row.path }}</span>
-									</td>
-									<td class="mono nowrap">
-										{{ row.installed ?? '—' }} → {{ row.latest ?? '?' }}
-									</td>
-									<td class="mono nowrap dim">{{ row.requested }}</td>
-									<td>{{ row.behind ?? '—' }}</td>
-									<td class="fix">
-										<template v-if="row.fix && isCommand(row.fix)">
-											<code>{{ row.fix }}</code>
-											<button
-												type="button"
-												class="copy"
-												@click="
-													copy(`${entry.consumer} ${row.name} ${row.path}`, row.fix!)
-												"
-											>
-												{{ copyLabel(`${entry.consumer} ${row.name} ${row.path}`) }}
-											</button>
-										</template>
-										<template v-else>{{ row.fix ?? '—' }}</template>
-									</td>
-								</tr>
-							</tbody>
-						</table>
+										<span class="mono"
+											>{{ detail.installed ?? '—' }} → {{ detail.latest ?? '?' }}</span
+										>
+										<span v-if="isDev(detail)" class="dev">dev</span>
+									</span>
+								</template>
+							</div>
+
+							<svg
+								class="graph-lines"
+								:width="graph.width"
+								:height="graph.height"
+								:viewBox="`0 0 ${graph.width} ${graph.height}`"
+								:style="{ left: `${GRAPH_LEFT}px` }"
+								aria-hidden="true"
+							>
+								<g
+									v-for="lane in paintOrder"
+									:key="lane.repo"
+									:style="{ '--lane': laneColor(lane.index) }"
+									:class="{ faint: !laneLit(lane) }"
+								>
+									<path class="lane-halo" :d="lane.halo" />
+									<path class="lane-line" :d="lane.line" />
+									<path class="lane-head" :d="lane.heads" />
+									<path
+										v-for="edge in lane.edges"
+										:key="edge.consumer"
+										class="lane-line"
+										:class="{ dashed: edge.dashed, faint: !edgeLit(edge) }"
+										:d="edge.line"
+									/>
+								</g>
+								<g
+									v-for="row in graph.rows"
+									:key="row.repo"
+									:class="{ faint: !rowLit(row.repo) }"
+								>
+									<circle
+										class="graph-node"
+										:cx="row.nodeX"
+										:cy="row.y"
+										r="7"
+										:style="{
+											fill:
+												row.lane !== null ? laneColor(row.lane) : 'var(--vp-c-text-2)',
+										}"
+									/>
+									<text
+										v-if="row.lane !== null"
+										class="graph-label"
+										:x="row.nodeX + 12"
+										:y="row.y + 4"
+										:style="{ fill: laneColor(row.lane) }"
+									>
+										{{ graph.lanes[row.lane].label }}
+									</text>
+								</g>
+							</svg>
+						</div>
 					</div>
 					<p v-else class="empty">
 						{{ filtering ? 'No outdated usage matches the filter.' : 'Nothing to update.' }}
@@ -468,12 +575,30 @@ const copyLabel = (key: string): string =>
 	--st-ahead: var(--vp-c-text-2);
 	--st-current: var(--vp-c-success-1);
 
+	/* One colour per lane of the graph; these differ in lightness as well as in hue. */
+	--st-lane-0: #6a2f9e;
+	--st-lane-1: #0b6fb8;
+	--st-lane-2: #c2570a;
+	--st-lane-3: #0f7a5f;
+	--st-lane-4: #a61e4d;
+	--st-lane-5: #4c5ab4;
+
 	box-sizing: border-box;
 	max-width: 1228px;
 	margin-inline: auto;
 	padding: 32px 24px 96px;
 	font-size: 14px;
 	line-height: 1.5;
+}
+
+/* A plain descendant selector, so that `.dark` stays a real ancestor under scoped CSS. */
+.dark .status-page {
+	--st-lane-0: #c49bf0;
+	--st-lane-1: #6db8f0;
+	--st-lane-2: #f0a060;
+	--st-lane-3: #5fd0ac;
+	--st-lane-4: #f08aa8;
+	--st-lane-5: #a3acf0;
 }
 
 h1 {
@@ -527,14 +652,6 @@ code,
 
 .nowrap {
 	white-space: nowrap;
-}
-
-.sr-only {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	overflow: hidden;
-	clip-path: inset(50%);
 }
 
 section {
@@ -710,23 +827,6 @@ thead th {
 	font-weight: 500;
 }
 
-td.position {
-	color: var(--vp-c-text-2);
-	font-variant-numeric: tabular-nums;
-	text-align: right;
-}
-
-th.position,
-td.position {
-	width: 2.2em;
-	padding-right: 10px;
-}
-
-th.repo {
-	font-weight: 600;
-	white-space: nowrap;
-}
-
 /* The table scrolls sideways when narrow, so a name never has to break from its mark. */
 .package {
 	white-space: nowrap;
@@ -748,26 +848,223 @@ th.repo {
 	font-size: 12px;
 }
 
-.fix {
-	min-width: 300px;
+/* Outdated dependencies: rows with a graph drawn across them -------------- */
+
+.graph-key {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 24px;
+	margin: 0 0 12px;
+	padding: 0;
+	color: var(--vp-c-text-2);
+	font-size: 13px;
+	list-style: none;
 }
 
-.fix code {
-	margin-right: 8px;
+.graph-key li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
 }
 
-.copy {
-	padding: 0 7px;
-	border: 1px solid var(--vp-c-divider);
-	border-radius: 4px;
+.graph-key-dash {
+	fill: none;
+	stroke: var(--vp-c-text-2);
+	stroke-width: 3;
+	stroke-dasharray: 6 4;
+}
+
+.graph {
+	position: relative;
+}
+
+.graph-head {
+	position: absolute;
+	inset: 0 0 auto;
+	height: 32px;
+	border-bottom: 1px solid var(--vp-c-divider);
+	color: var(--vp-c-text-2);
+	font-size: 13px;
+	font-weight: 500;
+}
+
+.graph-head span {
+	position: absolute;
+	top: 6px;
+}
+
+.graph-group {
+	position: absolute;
+	left: 36px;
+	margin: 0;
+	color: var(--vp-c-text-1);
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 20px;
+}
+
+.graph-row {
+	position: absolute;
+	inset-inline: 0;
+	border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.graph-row.banded {
+	background: var(--vp-c-bg-soft);
+}
+
+.graph-row.active {
+	background: var(--vp-c-brand-soft);
+}
+
+/* Behind everything else in the row, so that its links stay links. */
+.graph-row-select {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	cursor: pointer;
+}
+
+.graph-row-select:focus-visible {
+	outline-offset: -2px;
+}
+
+.graph-row > span {
+	position: absolute;
+	pointer-events: none;
+}
+
+.graph-row a {
+	pointer-events: auto;
+}
+
+.graph-row.faint > span {
+	opacity: 0.35;
+}
+
+.row-position {
+	box-sizing: border-box;
+	top: 11px;
+	left: 0;
+	width: 36px;
+	padding-right: 12px;
+	color: var(--vp-c-text-2);
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
+
+.row-name {
+	top: 4px;
+	left: 36px;
+	width: 252px;
+	line-height: 18px;
+}
+
+.row-name a {
+	display: block;
+	overflow: hidden;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.row-packages {
+	display: block;
+	overflow: hidden;
 	color: var(--vp-c-text-2);
 	font-size: 12px;
-	line-height: 1.5;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
-.copy:hover {
-	border-color: var(--vp-c-brand-1);
-	color: var(--vp-c-brand-1);
+.row-summary {
+	top: 11px;
+	color: var(--vp-c-text-2);
+	font-size: 13px;
+	white-space: nowrap;
+}
+
+/* Both sit on a centre line given as their `top`. */
+.row-behind,
+.row-update {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 8px;
+	font-size: 13px;
+	line-height: 20px;
+	white-space: nowrap;
+	transform: translateY(-50%);
+}
+
+.row-behind {
+	gap: 2px;
+	font-weight: 500;
+}
+
+.row-update a {
+	font-weight: 600;
+}
+
+.row-update .dev {
+	margin-left: 0;
+}
+
+.behind-major {
+	color: var(--vp-c-danger-1);
+}
+
+.behind-minor {
+	color: var(--vp-c-warning-1);
+}
+
+.behind-patch {
+	color: var(--vp-c-text-2);
+}
+
+.graph-lines {
+	position: absolute;
+	top: 0;
+	overflow: visible;
+	pointer-events: none;
+}
+
+.lane-halo {
+	fill: none;
+	stroke: var(--lane);
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	stroke-opacity: 0.22;
+	stroke-width: 11;
+}
+
+.lane-line {
+	fill: none;
+	stroke: var(--lane);
+	stroke-linecap: round;
+	stroke-width: 3;
+}
+
+.lane-line.dashed {
+	stroke-dasharray: 6 4;
+}
+
+.lane-head {
+	fill: var(--lane);
+}
+
+.graph-node {
+	stroke: var(--vp-c-bg);
+	stroke-width: 2;
+}
+
+.graph-label {
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.graph-lines .faint {
+	opacity: 0.15;
 }
 
 /* Packages --------------------------------------------------------------- */

@@ -261,6 +261,38 @@ export function manifestVersions(files: RepoFile[]): Map<string, string> {
 	return versions;
 }
 
+/**
+ * What each repository offers to others: every package or crate in it that is not
+ * marked as private. An application's own manifest usually is, and says nothing.
+ */
+export function publishedPackages(files: RepoFile[]): Record<string, string[]> {
+	const found = new Map<string, Set<string>>();
+	const add = (repo: string, name: string): void => {
+		found.set(repo, (found.get(repo) ?? new Set()).add(name));
+	};
+	for (const file of files) {
+		if (file.role === 'package') {
+			try {
+				const { name, private: hidden } = JSON.parse(file.text) as {
+					name?: unknown;
+					private?: unknown;
+				};
+				if (typeof name === 'string' && name && hidden !== true) add(file.repo, name);
+			} catch {
+				// not valid JSON; reported by the collector
+			}
+		}
+		if (file.role === 'cargo') {
+			const block = /^\s*\[package\]([^[]*)/ms.exec(file.text)?.[1] ?? '';
+			const name = /^\s*name\s*=\s*"([^"]+)"/m.exec(block)?.[1];
+			if (name && !/^\s*publish\s*=\s*false/m.test(block)) add(file.repo, name);
+		}
+	}
+	return Object.fromEntries(
+		[...found].map(([repo, names]) => [repo, [...names].sort((a, b) => a.localeCompare(b))]),
+	);
+}
+
 /* ------------------------------------------------------------------------ */
 /* Lockfiles                                                                */
 /* ------------------------------------------------------------------------ */
@@ -460,6 +492,8 @@ export interface DriftResult {
 	releases: Map<string, Release | null>;
 	deployments?: DeploymentReport[];
 	pins?: PinFinding[];
+	/** Repository name to the packages and crates it publishes. */
+	publishes?: Record<string, string[]>;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -880,7 +914,7 @@ export async function collectDrift(
 			? { ...assess(usage, null), note: 'lockfile could not be read' }
 			: assess(usage, releases.get(releaseKey(usage)) ?? null),
 	);
-	return { findings, releases };
+	return { findings, releases, publishes: publishedPackages(files) };
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1023,6 +1057,8 @@ export interface DriftReport {
 	deployments: DeploymentReport[];
 	/** Exact releases named in files and image tags; what is behind comes first. */
 	pins: PinFinding[];
+	/** Repository name to the packages and crates it publishes. */
+	publishes: Record<string, string[]>;
 	totals: {
 		usages: number;
 		byStatus: Record<Status, number>;
@@ -1116,6 +1152,7 @@ export function buildDriftReport(
 		dependents,
 		deployments,
 		pins,
+		publishes: result.publishes ?? {},
 		totals: {
 			usages: result.findings.length,
 			byStatus,

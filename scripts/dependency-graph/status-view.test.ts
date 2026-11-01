@@ -5,7 +5,6 @@ import {
 	filterDrift,
 	formatUtc,
 	hoursAgo,
-	isCommand,
 	isDev,
 	isStale,
 	pinLocation,
@@ -60,16 +59,6 @@ describe('pinLocation', () => {
 
 	it('still names the component when the release could not be read', () => {
 		expect(pinLocation({ ...none, component: 'Style' })).toBe('latest release: Style');
-	});
-});
-
-describe('isCommand', () => {
-	it('tells commands from instructions', () => {
-		expect(isCommand('npm update @versatiles/style')).toBe(true);
-		expect(isCommand('cd web && npm update @versatiles/style')).toBe(true);
-		expect(isCommand('cargo update -p versatiles_core')).toBe(true);
-		expect(isCommand('widen the peer range to include 6.0.0')).toBe(false);
-		expect(isCommand('set versatiles_core = "5.0.0" in Cargo.toml')).toBe(false);
 	});
 });
 

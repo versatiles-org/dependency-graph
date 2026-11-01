@@ -41,6 +41,7 @@ const REPORT_FIELDS = {
 	dependents: true,
 	deployments: true,
 	pins: true,
+	publishes: true,
 	totals: true,
 } satisfies Record<keyof DriftReport, true>;
 

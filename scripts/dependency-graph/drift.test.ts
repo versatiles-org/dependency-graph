@@ -17,6 +17,7 @@ import {
 	newestImageTag,
 	parseComponents,
 	parseRegistry,
+	publishedPackages,
 	readPin,
 	registryUrl,
 	renderDrift,
@@ -154,6 +155,27 @@ describe('manifestVersions', () => {
 			'@versatiles/style': '6.0.3',
 			core: '4.15.0',
 			own: '0.1.0',
+		});
+	});
+});
+
+describe('publishedPackages', () => {
+	it('lists what a repository offers, sorted, and leaves out what is private', () => {
+		const files = [
+			file('lib', 'package.json', pkg('@versatiles/lib')),
+			file('lib', 'extra/package.json', pkg('@versatiles/another')),
+			file('app', 'package.json', pkg('app', { private: true })),
+			file('mixed', 'package.json', pkg('mixed', { private: true })),
+			file('mixed', 'export/package.json', pkg('@versatiles/export')),
+			file('rs', 'core/Cargo.toml', '[package]\nname = "core"\n'),
+			file('rs', 'cli/Cargo.toml', '[package]\nname = "cli"\npublish = false\n'),
+			file('rs', 'Cargo.toml', '[workspace]\nmembers = ["core"]\n'),
+			file('broken', 'package.json', 'not json'),
+		];
+		expect(publishedPackages(files)).toEqual({
+			lib: ['@versatiles/another', '@versatiles/lib'],
+			mixed: ['@versatiles/export'],
+			rs: ['core'],
 		});
 	});
 });

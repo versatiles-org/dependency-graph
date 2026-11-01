@@ -38,11 +38,6 @@ export function isDev(finding: Pick<Finding, 'section'>): boolean {
 	return /(^|\.)dev-?dependencies$/i.test(finding.section);
 }
 
-/** Some fixes are commands to run, others are instructions to read. */
-export function isCommand(fix: string): boolean {
-	return /^(cd|npm|cargo) /.test(fix);
-}
-
 /** Where a pinned version was found: a file, an image, or a release's notes. */
 export function pinLocation(pin: Pick<PinFinding, 'path' | 'image' | 'tag' | 'component'>): string {
 	return pin.path ?? pin.image ?? `${pin.tag ?? 'latest release'}: ${pin.component}`;
