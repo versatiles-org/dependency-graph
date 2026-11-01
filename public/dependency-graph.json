@@ -400,7 +400,7 @@
 			"kind": "download",
 			"detail": "github.com/versatiles-org/versatiles-rs/blob",
 			"path": "lib/tools.ts",
-			"line": 25
+			"line": 24
 		},
 		{
 			"from": "landcover-vectors",
@@ -412,11 +412,19 @@
 		},
 		{
 			"from": "landcover-vectors",
+			"to": "versatiles-rs",
+			"kind": "npm",
+			"detail": "@versatiles/versatiles-rs@^5.4.0",
+			"path": "package.json",
+			"line": 35
+		},
+		{
+			"from": "landcover-vectors",
 			"to": "versatiles-style",
 			"kind": "npm",
 			"detail": "@versatiles/style@^7.0.1",
 			"path": "package.json",
-			"line": 33
+			"line": 34
 		},
 		{
 			"from": "maplibre-versatiles-styler",
