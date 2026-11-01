@@ -123,6 +123,39 @@ describe('pins in the configuration', () => {
 	});
 });
 
+describe('bundles in the configuration', () => {
+	const BUNDLE = `${MINIMAL}bundles:
+  - repo: versatiles-frontend
+    components:
+      VersaTiles Style: versatiles-style
+    ignore: [MapLibre GL JS]
+`;
+
+	it('reads the components and what is knowingly left out', () => {
+		expect(load(BUNDLE).bundles).toEqual([
+			{
+				repo: 'versatiles-frontend',
+				components: { 'VersaTiles Style': 'versatiles-style' },
+				ignore: ['MapLibre GL JS'],
+			},
+		]);
+		expect(load(MINIMAL).bundles).toEqual([]);
+	});
+
+	it('refuses components that are not a mapping', () => {
+		expect(() => load(`${MINIMAL}bundles:\n  - { repo: a, components: [b] }\n`)).toThrow(
+			/components must map/,
+		);
+	});
+
+	it('reports a repository that no longer exists', () => {
+		expect(validateConfig(load(BUNDLE), new Set(['versatiles-rs']))).toEqual([
+			'bundles: unknown repository "versatiles-frontend"',
+			'bundles: unknown repository "versatiles-style"',
+		]);
+	});
+});
+
 describe('validateConfig', () => {
 	const known = new Set(['versatiles-rs', 'versatiles-docker']);
 

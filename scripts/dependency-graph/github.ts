@@ -188,13 +188,22 @@ export class GitHub {
 		return body === null ? null : (JSON.parse(body) as T);
 	}
 
-	/** Tag and date of the latest release of a repository, or null if it has none. */
-	async latestRelease(org: string, repo: string): Promise<{ tag: string; date: string } | null> {
-		const release = await this.getJson<{ tag_name?: string; published_at?: string }>(
-			`${API}/repos/${org}/${repo}/releases/latest`,
-		);
+	/** Tag, date and notes of the latest release of a repository, or null if it has none. */
+	async latestRelease(
+		org: string,
+		repo: string,
+	): Promise<{ tag: string; date: string; notes: string } | null> {
+		const release = await this.getJson<{
+			tag_name?: string;
+			published_at?: string;
+			body?: string | null;
+		}>(`${API}/repos/${org}/${repo}/releases/latest`);
 		if (!release?.tag_name) return null;
-		return { tag: release.tag_name, date: release.published_at ?? '' };
+		return {
+			tag: release.tag_name,
+			date: release.published_at ?? '',
+			notes: release.body ?? '',
+		};
 	}
 
 	/** Public repositories of `org`, sorted by name. */

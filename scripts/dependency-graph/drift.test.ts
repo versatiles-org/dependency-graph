@@ -5,6 +5,7 @@ import {
 	assessDeployment,
 	buildDriftReport,
 	cargoRequirements,
+	collectBundles,
 	collectDeployments,
 	collectDrift,
 	collectPins,
@@ -14,6 +15,7 @@ import {
 	lockedVersion,
 	manifestVersions,
 	newestImageTag,
+	parseComponents,
 	parseRegistry,
 	readPin,
 	registryUrl,
@@ -505,6 +507,133 @@ describe('pinned releases', () => {
 			// Current pins stay out of a report of what is outdated.
 			expect(text).not.toContain('org/fresh');
 			expect(text).toMatch(/2 pinned behind$/);
+		});
+	});
+});
+
+describe('bundled releases', () => {
+	const NOTES = [
+		'# VersaTiles Frontend 3.16.1',
+		'',
+		'## Components',
+		'',
+		'- [VersaTiles Fonts v3.0.0](https://github.com/versatiles-org/versatiles-fonts)',
+		'- [VersaTiles Style v7.0.1](https://github.com/versatiles-org/versatiles-style)',
+		'- [MapLibre GL JS v6.14.0](https://maplibre.org/maplibre-gl-js/docs/)',
+		'- [Brand New Thing v1.0.0](https://example.org)',
+		'',
+		'## Frontends',
+		'',
+		'- [Not A Component v9.9.9](https://example.org)',
+	].join('\n');
+
+	describe('parseComponents', () => {
+		it('reads the list under its heading, and nothing after it', () => {
+			expect(parseComponents(NOTES)).toEqual([
+				{ name: 'VersaTiles Fonts', version: '3.0.0' },
+				{ name: 'VersaTiles Style', version: '7.0.1' },
+				{ name: 'MapLibre GL JS', version: '6.14.0' },
+				{ name: 'Brand New Thing', version: '1.0.0' },
+			]);
+		});
+
+		it('copes with Windows line endings, which edited notes come back with', () => {
+			expect(parseComponents(NOTES.replaceAll('\n', '\r\n'))).toHaveLength(4);
+		});
+
+		it('finds nothing without the heading', () => {
+			expect(parseComponents('# Release\n\n- [Thing v1.0.0](https://example.org)')).toEqual([]);
+			expect(parseComponents('')).toEqual([]);
+		});
+	});
+
+	describe('collectBundles', () => {
+		const bundle = {
+			repo: 'versatiles-frontend',
+			components: {
+				'VersaTiles Fonts': 'versatiles-fonts',
+				'VersaTiles Style': 'versatiles-style',
+				'VersaTiles Gone': 'versatiles-gone',
+			},
+			ignore: ['MapLibre GL JS'],
+		};
+		const release = (version: string): Release => ({ version, date: null, source: 'release' });
+		const source = {
+			latestRelease: (repo: string) =>
+				Promise.resolve(release(repo === 'versatiles-style' ? 'v7.1.0' : 'v3.0.0')),
+			releaseNotes: () => Promise.resolve({ tag: 'v3.16.1', notes: NOTES }),
+		};
+		const rows = (found: Awaited<ReturnType<typeof collectBundles>>) =>
+			found.map((pin) => [pin.component, pin.pinned, pin.status, pin.behind, pin.note]);
+
+		it('compares what is listed, and reports what is missing or unplaced', async () => {
+			const found = await collectBundles([bundle], source, mapLimit);
+			expect(rows(found)).toEqual([
+				['VersaTiles Fonts', '3.0.0', 'current', null, ''],
+				['VersaTiles Style', '7.0.1', 'behind', 'minor', 'needs a new release'],
+				['VersaTiles Gone', null, 'unknown', null, 'not in the release notes'],
+				[
+					'Brand New Thing',
+					'1.0.0',
+					'unknown',
+					null,
+					'not in the configuration, so not compared',
+				],
+			]);
+			expect(found[1]).toMatchObject({
+				repo: 'versatiles-frontend',
+				tag: 'v3.16.1',
+				provider: 'versatiles-style',
+				path: null,
+				image: null,
+			});
+			expect(found[3].provider).toBeNull();
+		});
+
+		it('leaves out what is knowingly not compared', async () => {
+			const found = await collectBundles([bundle], source, mapLimit);
+			expect(found.map((pin) => pin.component)).not.toContain('MapLibre GL JS');
+		});
+
+		it('reports every component when the notes cannot be read', async () => {
+			const found = await collectBundles(
+				[bundle],
+				{ ...source, releaseNotes: () => Promise.reject(new Error('502')) },
+				mapLimit,
+			);
+			expect(found).toHaveLength(3);
+			for (const pin of found) {
+				expect(pin).toMatchObject({
+					status: 'unknown',
+					tag: null,
+					note: 'release notes could not be read',
+				});
+			}
+		});
+
+		it('notices when the notes stop listing components', async () => {
+			const found = await collectBundles(
+				[bundle],
+				{
+					...source,
+					releaseNotes: () => Promise.resolve({ tag: 'v4.0.0', notes: 'Changed.' }),
+				},
+				mapLimit,
+			);
+			expect(found.map((pin) => pin.note)).toEqual(Array(3).fill('not in the release notes'));
+		});
+
+		it('prints bundled components with the release they are in', async () => {
+			const pins = await collectBundles([bundle], source, mapLimit);
+			const text = renderDrift(
+				{ findings: [], releases: new Map(), pins },
+				{ color: false, now: new Date(), onlyOutdated: true },
+			);
+			expect(text).toContain('versatiles-frontend/v3.16.1: VersaTiles Style');
+			expect(text).toMatch(
+				/7\.0\.1 → 7\.1\.0 {2}versatiles-style {2}minor behind, needs a new release/,
+			);
+			expect(text).toMatch(/1 pinned behind$/);
 		});
 	});
 });

@@ -8,6 +8,7 @@ import {
 	isCommand,
 	isDev,
 	isStale,
+	pinLocation,
 } from './status-view';
 
 const now = new Date('2026-11-01T12:00:00Z');
@@ -45,6 +46,20 @@ describe('isDev', () => {
 		expect(isDev({ section: 'dependencies' })).toBe(false);
 		expect(isDev({ section: 'workspace.dependencies' })).toBe(false);
 		expect(isDev({ section: 'peerDependencies' })).toBe(false);
+	});
+});
+
+describe('pinLocation', () => {
+	const none = { path: null, image: null, tag: null, component: null };
+
+	it('names the file, the image or the release that holds the version', () => {
+		expect(pinLocation({ ...none, path: 'Formula/x.rb' })).toBe('Formula/x.rb');
+		expect(pinLocation({ ...none, image: 'org/image' })).toBe('org/image');
+		expect(pinLocation({ ...none, tag: 'v3.16.1', component: 'Style' })).toBe('v3.16.1: Style');
+	});
+
+	it('still names the component when the release could not be read', () => {
+		expect(pinLocation({ ...none, component: 'Style' })).toBe('latest release: Style');
 	});
 });
 

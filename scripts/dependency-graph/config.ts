@@ -7,7 +7,7 @@
  */
 
 import { readFileSync } from 'fs';
-import type { Deployment, Pin, PinnedImage } from './drift';
+import type { Bundle, Deployment, Pin, PinnedImage } from './drift';
 import { resolve } from 'path';
 import { load as loadYaml } from 'js-yaml';
 import { EDGE_KINDS, type EdgeKind, type TagInfo } from './model';
@@ -41,6 +41,8 @@ export interface GraphConfig {
 	pins: Pin[];
 	/** Images tagged with the release of another repository, for the drift report. */
 	pinnedImages: PinnedImage[];
+	/** Releases whose notes list what they bundle, for the drift report. */
+	bundles: Bundle[];
 	/** Tag ids in the order their repositories should be updated; see the drift report. */
 	updateOrder: string[];
 	/** Docker image name (without tag) to the repository that builds it. */
@@ -167,6 +169,30 @@ export function loadConfig(root: string): GraphConfig {
 		},
 	);
 
+	const bundles = ((doc.bundles as unknown[] | undefined) ?? []).map((entry, index): Bundle => {
+		const where = `bundles[${index}]`;
+		const bundle = entry as Record<string, unknown>;
+		const { components, ignore } = bundle;
+		if (typeof components !== 'object' || components === null || Array.isArray(components)) {
+			fail(`${where}.components must map names in the release notes to repositories`);
+		}
+		if (ignore !== undefined && !Array.isArray(ignore)) {
+			fail(`${where}.ignore must be a list of names in the release notes`);
+		}
+		return {
+			repo: asString(bundle.repo, `${where}.repo`),
+			components: Object.fromEntries(
+				Object.entries(components).map(([name, repo]) => [
+					name,
+					asString(repo, `${where}.components.${name}`),
+				]),
+			),
+			ignore: ((ignore as unknown[] | undefined) ?? []).map((name, at) =>
+				asString(name, `${where}.ignore[${at}]`),
+			),
+		};
+	});
+
 	const manual = (doc.manual as unknown[] | undefined) ?? [];
 	const ignore = (doc.ignore as unknown[] | undefined) ?? [];
 
@@ -179,6 +205,7 @@ export function loadConfig(root: string): GraphConfig {
 		deployments,
 		pins,
 		pinnedImages,
+		bundles,
 		updateOrder,
 		images: (doc.images as Record<string, string> | undefined) ?? {},
 		exclude: (doc.exclude as string[] | undefined) ?? [],
@@ -234,6 +261,11 @@ export function validateConfig(config: GraphConfig, knownRepos: Set<string>): st
 	for (const pin of [...config.pins, ...config.pinnedImages]) {
 		checkRepo(pin.repo, 'pins');
 		checkRepo(pin.provider, 'pins');
+	}
+
+	for (const bundle of config.bundles) {
+		checkRepo(bundle.repo, 'bundles');
+		for (const repo of Object.values(bundle.components)) checkRepo(repo, 'bundles');
 	}
 
 	for (const repo of config.exclude) checkRepo(repo, 'exclude');

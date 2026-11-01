@@ -192,6 +192,33 @@ describe('when GitHub misbehaves', () => {
 	});
 });
 
+describe('latestRelease', () => {
+	it('returns the tag, the date and the notes', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(
+				reply({
+					tag_name: 'v1.2.3',
+					published_at: '2026-11-01T00:00:00Z',
+					body: '## Components',
+				}),
+			),
+		);
+		expect(await client().latestRelease('versatiles-org', 'x')).toEqual({
+			tag: 'v1.2.3',
+			date: '2026-11-01T00:00:00Z',
+			notes: '## Components',
+		});
+	});
+
+	it('copes with a release without notes, and a repository without releases', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(reply({ tag_name: 'v1', body: null })));
+		expect((await client().latestRelease('versatiles-org', 'x'))?.notes).toBe('');
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply('', 404)));
+		expect(await client().latestRelease('versatiles-org', 'x')).toBeNull();
+	});
+});
+
 describe('getRegistryJson', () => {
 	it('parses the document and never sends the GitHub token to a registry', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(reply({ 'dist-tags': { latest: '1.0.0' } }));

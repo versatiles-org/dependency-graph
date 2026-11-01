@@ -27,7 +27,7 @@ import { dirname, posix } from 'path';
 import { styleText } from 'util';
 import semver from 'semver';
 import type { NameMaps, RepoFile } from './collect';
-import { daysAgo as age, isDev } from './status-view';
+import { daysAgo as age, isDev, pinLocation } from './status-view';
 
 export type Ecosystem = 'npm' | 'cargo';
 
@@ -625,13 +625,32 @@ export interface PinnedImage {
 	provider: string;
 }
 
+/**
+ * A release that bundles releases of other repositories, and says which in its
+ * notes. What was bundled can differ from the lockfile on the default branch:
+ * only the release shows what people are actually getting.
+ */
+export interface Bundle {
+	/** Repository publishing the release. */
+	repo: string;
+	/** Name in the notes → repository whose releases it is. */
+	components: Record<string, string>;
+	/** Names in the notes that are knowingly not compared, such as upstream projects. */
+	ignore: string[];
+}
+
 export interface PinFinding {
 	repo: string;
-	/** File holding the version; null for an image. */
+	/** File holding the version, when it is in a file. */
 	path: string | null;
-	/** Image whose tags hold the version; null for a file. */
+	/** Image whose tags hold the version, when it is in a tag. */
 	image: string | null;
-	provider: string;
+	/** Release whose notes hold the version, when it is bundled and they could be read. */
+	tag: string | null;
+	/** Name in those notes. */
+	component: string | null;
+	/** Repository whose releases are pinned, or null when the configuration does not say. */
+	provider: string | null;
 	/** The version named, or null when it could not be read. */
 	pinned: string | null;
 	latest: Release | null;
@@ -672,45 +691,131 @@ export function newestImageTag(body: unknown): string | null {
 export const imageTagsUrl = (image: string): string =>
 	`https://hub.docker.com/v2/repositories/${image}/tags?page_size=100`;
 
+type Mapper = <T, R>(items: readonly T[], worker: (item: T) => Promise<R>) => Promise<R[]>;
+
+async function latestReleases(
+	providers: string[],
+	source: Pick<DriftSource, 'latestRelease'>,
+	mapLimit: Mapper,
+): Promise<Map<string, Release | null>> {
+	const latest = new Map<string, Release | null>();
+	await mapLimit([...new Set(providers)], async (repo) => {
+		const release = await source.latestRelease(repo).catch(() => null);
+		latest.set(repo, release && { ...release, version: plain(release.version) });
+	});
+	return latest;
+}
+
+/** What is not found is reported: otherwise it would stop being watched unnoticed. */
+function pinFinding(
+	entry: Pick<PinFinding, 'repo' | 'provider' | 'path' | 'image' | 'tag' | 'component'>,
+	pinned: string | null,
+	unread: string,
+	latest: Map<string, Release | null>,
+	whenBehind: string,
+): PinFinding {
+	const version = pinned === null ? null : plain(pinned);
+	const release = entry.provider === null ? null : (latest.get(entry.provider) ?? null);
+	const base = { ...entry, pinned: version, latest: release };
+	return version === null
+		? { ...base, status: 'unknown', behind: null, note: unread }
+		: { ...base, ...compareToRelease(version, release, whenBehind) };
+}
+
 export async function collectPins(
 	pins: Pin[],
 	images: PinnedImage[],
 	source: DriftSource,
-	mapLimit: <T, R>(items: readonly T[], worker: (item: T) => Promise<R>) => Promise<R[]>,
+	mapLimit: Mapper,
 ): Promise<PinFinding[]> {
-	const providers = [...new Set([...pins, ...images].map((entry) => entry.provider))];
-	const latest = new Map<string, Release | null>();
-	await mapLimit(providers, async (repo) => {
-		const release = await source.latestRelease(repo).catch(() => null);
-		latest.set(repo, release && { ...release, version: plain(release.version) });
-	});
-
-	/** A pin that cannot be read is reported: otherwise it would stop being watched unnoticed. */
-	const finding = (
-		entry: { repo: string; provider: string; path: string | null; image: string | null },
-		pinned: string | null,
-		unread: string,
-	): PinFinding => {
-		const version = pinned === null ? null : plain(pinned);
-		const release = latest.get(entry.provider) ?? null;
-		const base = { ...entry, pinned: version, latest: release };
-		return version === null
-			? { ...base, status: 'unknown', behind: null, note: unread }
-			: { ...base, ...compareToRelease(version, release, 'update the pin') };
-	};
+	const latest = await latestReleases(
+		[...pins, ...images].map((entry) => entry.provider),
+		source,
+		mapLimit,
+	);
+	const WHEN_BEHIND = 'update the pin';
+	const nowhere = { path: null, image: null, tag: null, component: null };
 
 	const fromFiles = await mapLimit(pins, async (pin) => {
-		const entry = { repo: pin.repo, provider: pin.provider, path: pin.path, image: null };
+		const entry = { ...nowhere, repo: pin.repo, provider: pin.provider, path: pin.path };
 		const text = await source.readFile(pin.repo, pin.path).catch(() => null);
-		if (text === null) return finding(entry, null, 'file could not be read');
-		return finding(entry, readPin(text, pin), 'no version found where the configuration says');
+		const version = text === null ? null : readPin(text, pin);
+		const unread =
+			text === null ? 'file could not be read' : 'no version found where the configuration says';
+		return pinFinding(entry, version, unread, latest, WHEN_BEHIND);
 	});
 	const fromImages = await mapLimit(images, async ({ image, repo, provider }) => {
-		const entry = { repo, provider, path: null, image };
 		const body = await source.getRegistryJson(imageTagsUrl(image)).catch(() => null);
-		return finding(entry, newestImageTag(body), 'no version tag could be read');
+		return pinFinding(
+			{ ...nowhere, repo, provider, image },
+			newestImageTag(body),
+			'no version tag could be read',
+			latest,
+			WHEN_BEHIND,
+		);
 	});
 	return [...fromFiles, ...fromImages];
+}
+
+/** The `- [Name v1.2.3](url)` lines under the `## Components` heading of release notes. */
+export function parseComponents(notes: string): { name: string; version: string }[] {
+	const lines = notes.replace(/\r\n/g, '\n').split('\n');
+	const start = lines.findIndex((line) => line.trim() === '## Components');
+	if (start === -1) return [];
+	const found: { name: string; version: string }[] = [];
+	for (const line of lines.slice(start + 1)) {
+		if (line.startsWith('## ')) break;
+		const match = /^- \[(.+) v(\d+\.\d+\.\d+\S*)\]\(/.exec(line);
+		if (match) found.push({ name: match[1], version: match[2] });
+	}
+	return found;
+}
+
+export async function collectBundles(
+	bundles: Bundle[],
+	source: Pick<DriftSource, 'latestRelease'> & {
+		/** Tag and notes of the latest release of a repository, or null if it has none. */
+		releaseNotes(repo: string): Promise<{ tag: string; notes: string } | null>;
+	},
+	mapLimit: Mapper,
+): Promise<PinFinding[]> {
+	const latest = await latestReleases(
+		bundles.flatMap((bundle) => Object.values(bundle.components)),
+		source,
+		mapLimit,
+	);
+	const WHEN_BEHIND = 'needs a new release';
+
+	const rows = await mapLimit(bundles, async ({ repo, components, ignore }) => {
+		const release = await source.releaseNotes(repo).catch(() => null);
+		const listed = release ? parseComponents(release.notes) : [];
+		const nowhere = { repo, path: null, image: null, tag: release?.tag ?? null };
+
+		const compared = Object.entries(components).map(([component, provider]) =>
+			pinFinding(
+				{ ...nowhere, component, provider },
+				listed.find((entry) => entry.name === component)?.version ?? null,
+				release ? 'not in the release notes' : 'release notes could not be read',
+				latest,
+				WHEN_BEHIND,
+			),
+		);
+		// A new component would otherwise go unwatched without anyone noticing.
+		const unplaced = listed
+			.filter(({ name }) => !(name in components) && !ignore.includes(name))
+			.map(({ name, version }): PinFinding => ({
+				...nowhere,
+				component: name,
+				provider: null,
+				pinned: plain(version),
+				latest: null,
+				status: 'unknown',
+				behind: null,
+				note: 'not in the configuration, so not compared',
+			}));
+		return [...compared, ...unplaced];
+	});
+	return rows.flat();
 }
 
 export const releaseKey = (usage: Pick<Usage, 'ecosystem' | 'name'>): string =>
@@ -994,7 +1099,7 @@ export function buildDriftReport(
 		(a, b) =>
 			PIN_ORDER.indexOf(a.status) - PIN_ORDER.indexOf(b.status) ||
 			a.repo.localeCompare(b.repo) ||
-			(a.path ?? a.image ?? '').localeCompare(b.path ?? b.image ?? ''),
+			pinLocation(a).localeCompare(pinLocation(b)),
 	);
 	return {
 		packages,
@@ -1097,7 +1202,7 @@ export function renderDrift(result: DriftResult, options: ReportOptions): string
 	const shownPins = report.pins.filter((pin) => !options.onlyOutdated || pin.status !== 'current');
 	if (shownPins.length > 0) {
 		lines.push(paint('underline', 'Pinned releases'), '');
-		const what = (pin: PinFinding): string => `${pin.repo}/${pin.path ?? pin.image}`;
+		const what = (pin: PinFinding): string => `${pin.repo}/${pinLocation(pin)}`;
 		const versions = (pin: PinFinding): string =>
 			pin.status === 'behind' ? `${pin.pinned} → ${pin.latest?.version}` : (pin.pinned ?? '—');
 		const whatWidth = Math.max(...shownPins.map((pin) => [...what(pin)].length));
@@ -1111,7 +1216,7 @@ export function renderDrift(result: DriftResult, options: ReportOptions): string
 				paint(style.color, style.mark),
 				pad(what(pin), whatWidth),
 				pad(versions(pin), versionsWidth),
-				paint('dim', pin.provider),
+				paint('dim', pin.provider ?? '—'),
 				note ? paint(style.color, note) : '',
 			];
 			lines.push(`  ${cells.join('  ')}`.trimEnd());

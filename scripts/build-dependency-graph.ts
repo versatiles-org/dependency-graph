@@ -29,6 +29,7 @@ import { loadConfig, validateConfig, CONFIG_PATH } from './dependency-graph/conf
 import { GitHub, mapLimit, type RepoInfo } from './dependency-graph/github';
 import { buildNameMaps, classify, collectEdges, type RepoFile } from './dependency-graph/collect';
 import {
+	collectBundles,
 	collectDeployments,
 	collectDrift,
 	collectPins,
@@ -169,7 +170,17 @@ async function main(): Promise<void> {
 		};
 		const result = await collectDrift(files, maps, source, tracked);
 		result.deployments = await collectDeployments(config.deployments, source, tracked);
-		result.pins = await collectPins(config.pins, config.pinnedImages, source, tracked);
+		result.pins = [
+			...(await collectPins(config.pins, config.pinnedImages, source, tracked)),
+			...(await collectBundles(
+				config.bundles,
+				{
+					latestRelease: source.latestRelease,
+					releaseNotes: (repo) => github.latestRelease(config.org, repo),
+				},
+				tracked,
+			)),
+		];
 		lookup.finish();
 		return result;
 	};

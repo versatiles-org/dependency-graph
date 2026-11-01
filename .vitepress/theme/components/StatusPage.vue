@@ -10,6 +10,7 @@ import {
 	isCommand,
 	isDev,
 	isStale,
+	pinLocation,
 } from '../../../scripts/dependency-graph/status-view';
 
 /** The same marks as the terminal report, so colour never has to speak alone. */
@@ -338,8 +339,9 @@ const copyLabel = (key: string): string =>
 				<section v-if="report.pins.length > 0">
 					<h2>Pinned releases</h2>
 					<p class="hint">
-						Exact releases named in a file or an image tag. References to the latest release
-						are not listed, because they cannot fall behind.
+						Exact releases named in a file, an image tag or the notes of a release that
+						bundles them. References to the latest release are not listed, because they cannot
+						fall behind.
 					</p>
 					<div class="scroll" tabindex="0">
 						<table>
@@ -356,7 +358,7 @@ const copyLabel = (key: string): string =>
 							<tbody>
 								<tr
 									v-for="pin in report.pins"
-									:key="`${pin.repo} ${pin.path ?? pin.image} ${pin.provider}`"
+									:key="`${pin.repo} ${pinLocation(pin)} ${pin.provider}`"
 								>
 									<td class="nowrap">
 										<a :href="repoUrl(pin.repo)">{{ pin.repo }}</a>
@@ -365,14 +367,24 @@ const copyLabel = (key: string): string =>
 										<a v-if="pin.path" :href="fileUrl(pin.repo, pin.path)">{{
 											pin.path
 										}}</a>
-										<a v-else :href="`https://hub.docker.com/r/${pin.image}`">{{
-											pin.image
-										}}</a>
+										<a
+											v-else-if="pin.image"
+											:href="`https://hub.docker.com/r/${pin.image}`"
+											>{{ pin.image }}</a
+										>
+										<a
+											v-else
+											:href="`${repoUrl(pin.repo)}/releases/${pin.tag ? `tag/${pin.tag}` : 'latest'}`"
+											>{{ pinLocation(pin) }}</a
+										>
 									</td>
 									<td class="mono nowrap">{{ pin.pinned ?? '—' }}</td>
 									<td class="mono nowrap">{{ pin.latest?.version ?? '—' }}</td>
 									<td class="nowrap">
-										<a :href="repoUrl(pin.provider)">{{ pin.provider }}</a>
+										<a v-if="pin.provider" :href="repoUrl(pin.provider)">{{
+											pin.provider
+										}}</a>
+										<template v-else>—</template>
 									</td>
 									<td>
 										<span

@@ -19,6 +19,7 @@ function configure(overrides: Partial<GraphConfig> = {}): GraphConfig {
 		deployments: [],
 		pins: [],
 		pinnedImages: [],
+		bundles: [],
 		updateOrder: ['library'],
 		images: {},
 		exclude: [],
