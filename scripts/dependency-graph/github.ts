@@ -143,8 +143,12 @@ export class GitHub {
 	}
 
 	/** Returns the response body, or null for 404. Retries transient failures. */
-	private async get(url: string, headers = this.headers): Promise<string | null> {
-		const cached = this.cachePath(url);
+	private async get(
+		url: string,
+		headers = this.headers,
+		postBody?: string,
+	): Promise<string | null> {
+		const cached = this.cachePath(url + (postBody ?? ''));
 		if (cached && existsSync(cached) && isCacheFresh(statSync(cached).mtimeMs, Date.now())) {
 			const body = readFileSync(cached, 'utf8');
 			return body === CACHED_404 ? null : body;
@@ -157,7 +161,9 @@ export class GitHub {
 
 			let response: Response;
 			try {
-				response = await this.gate.run(() => fetch(url, { headers }));
+				const init =
+					postBody === undefined ? { headers } : { method: 'POST', headers, body: postBody };
+				response = await this.gate.run(() => fetch(url, init));
 			} catch (error) {
 				lastError = error instanceof Error ? error.message : String(error);
 				continue;
@@ -181,6 +187,24 @@ export class GitHub {
 			if (!retryable) break;
 		}
 		throw new Error(`${lastError} for ${url}`);
+	}
+
+	/**
+	 * Answers a GraphQL query. Partial answers count as failures: a field left out
+	 * by an error would otherwise read as "nothing open" or "no checks".
+	 */
+	async graphql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
+		const body = await this.get(
+			`${API}/graphql`,
+			this.headers,
+			JSON.stringify({ query, variables }),
+		);
+		const answer = JSON.parse(body ?? '{}') as { data?: T; errors?: { message?: string }[] };
+		if (answer.errors?.length) {
+			throw new Error(`GraphQL: ${answer.errors[0].message ?? 'unknown error'}`);
+		}
+		if (answer.data === undefined) throw new Error('GraphQL: no data in the answer');
+		return answer.data;
 	}
 
 	private async getJson<T>(url: string): Promise<T | null> {

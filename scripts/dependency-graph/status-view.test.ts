@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assess, buildDriftReport, type Release, type Usage } from './drift';
+import type { RepoStatus } from './repo-status';
 import {
 	daysAgo,
 	filterDrift,
@@ -7,6 +8,7 @@ import {
 	hoursAgo,
 	isDev,
 	isStale,
+	listRepos,
 	pinLocation,
 } from './status-view';
 
@@ -59,6 +61,39 @@ describe('pinLocation', () => {
 
 	it('still names the component when the release could not be read', () => {
 		expect(pinLocation({ ...none, component: 'Style' })).toBe('latest release: Style');
+	});
+});
+
+describe('listRepos', () => {
+	const repo = (name: string, ci: RepoStatus['ci']): RepoStatus => ({
+		name,
+		branch: 'main',
+		issues: 0,
+		pulls: 0,
+		botPulls: 0,
+		ci,
+		lastCommit: null,
+		release: null,
+		unreleased: null,
+	});
+	const repos = [
+		repo('c', 'passing'),
+		repo('b', 'failing'),
+		repo('a', 'none'),
+		repo('ab', 'running'),
+	];
+
+	it('puts what is failing first, and the rest by name', () => {
+		expect(listRepos(repos, '').map((entry) => entry.name)).toEqual(['b', 'a', 'ab', 'c']);
+	});
+
+	it('finds a repository by part of its name, whatever its case', () => {
+		expect(listRepos(repos, ' A ').map((entry) => entry.name)).toEqual(['a', 'ab']);
+	});
+
+	it('leaves the list it was given in its order', () => {
+		listRepos(repos, '');
+		expect(repos[0].name).toBe('c');
 	});
 });
 

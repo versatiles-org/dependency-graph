@@ -39,6 +39,7 @@ import {
 import { Progress } from './dependency-graph/progress';
 import { renderJson, renderPage } from './dependency-graph/render';
 import { sortEdges, type Graph, type RepoNode } from './dependency-graph/model';
+import { collectRepoStatus } from './dependency-graph/repo-status';
 import { buildStatusSnapshot, renderStatusJson } from './dependency-graph/status';
 
 const ROOT = resolve(__dirname, '..');
@@ -285,11 +286,20 @@ async function main(): Promise<void> {
 			(stale.length === 0 ? ' (unchanged)' : `, updated ${stale.length} file(s)`),
 	);
 
-	const snapshot = await buildStatusSnapshot(collectVersions, {
+	const collectRepos = () =>
+		collectRepoStatus(
+			(query, variables) => github.graphql(query, variables),
+			config.org,
+			new Set(repos.map((repo) => repo.name)),
+		);
+	const snapshot = await buildStatusSnapshot(collectVersions, collectRepos, {
 		org: config.org,
 		now: new Date(),
 		rank,
 	});
+	if (snapshot.repos.status === 'failed') {
+		console.warn(`[dependency-graph] status: repositories not checked: ${snapshot.repos.error}`);
+	}
 	writeFileSync(resolve(ROOT, TARGET_STATUS), renderStatusJson(snapshot));
 	if (snapshot.drift.status === 'failed') {
 		console.warn(`[dependency-graph] status: versions not checked: ${snapshot.drift.error}`);

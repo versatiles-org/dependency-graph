@@ -25,6 +25,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # Read by the status page, which reports what is open and whether checks pass.
+      issues: read
+      pull-requests: read
+      checks: read
+      statuses: read
 
     steps:
       - name: Checkout repository

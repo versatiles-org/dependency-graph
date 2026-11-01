@@ -9,8 +9,10 @@ import {
 	hoursAgo,
 	isDev,
 	isStale,
+	listRepos,
 	pinLocation,
 } from '../../../scripts/dependency-graph/status-view';
+import type { CiState } from '../../../scripts/dependency-graph/repo-status';
 import { buildQueueGraph, type GraphEdge } from '../../../scripts/dependency-graph/queue-graph';
 
 /** The same marks as the terminal report, so colour never has to speak alone. */
@@ -31,8 +33,18 @@ const PIN_STATUS: Record<PinFinding['status'], { mark: string; tone: Status }> =
 	current: { mark: '✓', tone: 'current' },
 };
 
+const CI_STATE: Record<CiState, { mark: string; label: string; tone: Status }> = {
+	failing: { mark: '✗', label: 'Failing', tone: 'range' },
+	running: { mark: '?', label: 'Running', tone: 'unknown' },
+	passing: { mark: '✓', label: 'Passing', tone: 'current' },
+	none: { mark: '', label: 'No checks', tone: 'ahead' },
+};
+
 const report = data?.drift.status === 'ok' ? data.drift.data : null;
 const driftError = data?.drift.status === 'failed' ? data.drift.error : null;
+const repoStatus = data?.repos.status === 'ok' ? data.repos.data : null;
+const reposError = data?.repos.status === 'failed' ? data.repos.error : null;
+const ciFailing = repoStatus?.filter((repo) => repo.ci === 'failing').length ?? null;
 
 /** Unknown until mounted: the server must not bake an age into the page. */
 const now = ref<Date | null>(null);
@@ -58,6 +70,8 @@ const filtered = computed(() =>
 		: { queue: [], packages: [] },
 );
 const filtering = computed(() => query.value.trim() !== '' || hideDev.value);
+const listedRepos = computed(() => listRepos(repoStatus ?? [], query.value));
+const when = (date: string): string => (now.value ? daysAgo(date, now.value) : date.slice(0, 10));
 
 /** One tick per usage, worst first. */
 const ticks = computed(() =>
@@ -161,6 +175,12 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 						<li>
 							<strong>{{ report.totals.deploymentsBehind }}</strong>
 							deployed behind
+						</li>
+						<li v-if="ciFailing !== null">
+							<strong>{{ ciFailing }}</strong>
+							<a href="#repositories"
+								>{{ ciFailing === 1 ? 'repository' : 'repositories' }} failing CI</a
+							>
 						</li>
 					</ul>
 				</section>
@@ -563,6 +583,98 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 					</div>
 				</section>
 			</template>
+
+			<!-- Outside the report: a failure there says nothing about the repositories. -->
+			<section id="repositories">
+				<h2>Repositories</h2>
+				<p v-if="reposError" class="notice failed">
+					Repositories were not checked in this snapshot, and the next scheduled run tries
+					again.
+					<code>{{ reposError }}</code>
+				</p>
+				<template v-else>
+					<p class="hint">
+						What is open, whether the default branch passes, and what is waiting to be
+						released. Failing repositories come first.
+					</p>
+					<div v-if="listedRepos.length > 0" class="scroll" tabindex="0">
+						<table>
+							<thead>
+								<tr>
+									<th scope="col">Repository</th>
+									<th scope="col">CI</th>
+									<th scope="col">Issues</th>
+									<th scope="col">Pull requests</th>
+									<th scope="col">Last commit</th>
+									<th scope="col">Latest release</th>
+									<th scope="col">Unreleased commits</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr v-for="repo in listedRepos" :key="repo.name">
+									<td class="nowrap">
+										<a :href="repoUrl(repo.name)">{{ repo.name }}</a>
+									</td>
+									<td class="nowrap">
+										<a
+											v-if="repo.ci !== 'none'"
+											class="ci"
+											:class="`is-${CI_STATE[repo.ci].tone}`"
+											:href="`${repoUrl(repo.name)}/actions`"
+										>
+											<span class="mark" aria-hidden="true">{{
+												CI_STATE[repo.ci].mark
+											}}</span>
+											{{ CI_STATE[repo.ci].label }}
+										</a>
+										<span v-else class="dim">{{ CI_STATE.none.label }}</span>
+									</td>
+									<td class="count" :class="{ dim: repo.issues === 0 }">
+										<a v-if="repo.issues > 0" :href="`${repoUrl(repo.name)}/issues`">{{
+											repo.issues
+										}}</a>
+										<template v-else>0</template>
+									</td>
+									<td class="nowrap count" :class="{ dim: repo.pulls === 0 }">
+										<a v-if="repo.pulls > 0" :href="`${repoUrl(repo.name)}/pulls`">{{
+											repo.pulls
+										}}</a>
+										<template v-else>0</template>
+										<span v-if="repo.botPulls > 0" class="dim">
+											({{ repo.botPulls }} from bots)</span
+										>
+									</td>
+									<td class="nowrap dim">
+										{{ repo.lastCommit ? when(repo.lastCommit) : '—' }}
+									</td>
+									<td class="nowrap">
+										<template v-if="repo.release">
+											<a
+												class="mono"
+												:href="`${repoUrl(repo.name)}/releases/tag/${repo.release.tag}`"
+												>{{ repo.release.tag }}</a
+											>
+											<span v-if="repo.release.date" class="dim release-date">
+												{{ when(repo.release.date) }}</span
+											>
+										</template>
+										<span v-else class="dim">—</span>
+									</td>
+									<td class="count" :class="{ dim: !repo.unreleased }">
+										<a
+											v-if="repo.unreleased && repo.release"
+											:href="`${repoUrl(repo.name)}/compare/${repo.release.tag}...${repo.branch}`"
+											>{{ repo.unreleased }}</a
+										>
+										<template v-else>{{ repo.unreleased ?? '—' }}</template>
+									</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+					<p v-else class="empty">No repository matches the filter.</p>
+				</template>
+			</section>
 		</template>
 	</div>
 </template>
@@ -753,6 +865,10 @@ h2 {
 
 	.mark {
 		margin-right: 2px;
+	}
+
+	a {
+		margin-left: 4px;
 	}
 }
 
@@ -1124,6 +1240,25 @@ summary {
 	flex-wrap: wrap;
 	gap: 0 14px;
 	color: var(--vp-c-text-2);
+}
+
+/* Repositories ------------------------------------------------------------ */
+
+.count {
+	font-variant-numeric: tabular-nums;
+}
+
+/* A line break between two elements in a template leaves no space between them. */
+.release-date {
+	margin-left: 8px;
+}
+
+.ci {
+	color: var(--st-color);
+
+	&:hover {
+		color: var(--st-color);
+	}
 }
 
 /* Deployments ------------------------------------------------------------ */

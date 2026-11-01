@@ -192,6 +192,38 @@ describe('when GitHub misbehaves', () => {
 	});
 });
 
+describe('graphql', () => {
+	it('posts the query and variables, with the token, and returns the data', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(reply({ data: { viewer: 'me' } }));
+		vi.stubGlobal('fetch', fetchMock);
+		expect(await client().graphql('query { viewer }', { a: 1 })).toEqual({ viewer: 'me' });
+
+		const [url, init] = fetchMock.mock.calls[0] as [
+			string,
+			{ method: string; body: string; headers: Record<string, string> },
+		];
+		expect(url).toBe('https://api.github.com/graphql');
+		expect(init.method).toBe('POST');
+		expect(JSON.parse(init.body)).toEqual({ query: 'query { viewer }', variables: { a: 1 } });
+		expect(init.headers.authorization).toBe('Bearer test-token');
+	});
+
+	it('treats a partial answer as a failure', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi
+				.fn()
+				.mockResolvedValue(reply({ data: { a: null }, errors: [{ message: 'Not allowed' }] })),
+		);
+		await expect(client().graphql('query')).rejects.toThrow('GraphQL: Not allowed');
+	});
+
+	it('treats an answer without data as a failure', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({})));
+		await expect(client().graphql('query')).rejects.toThrow('no data');
+	});
+});
+
 describe('latestRelease', () => {
 	it('returns the tag, the date and the notes', async () => {
 		vi.stubGlobal(

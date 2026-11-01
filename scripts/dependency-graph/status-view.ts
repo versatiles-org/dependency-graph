@@ -4,6 +4,7 @@
  */
 
 import type { DependentReport, DriftReport, Finding, PackageReport, PinFinding } from './drift';
+import type { RepoStatus } from './repo-status';
 
 /** Scheduled runs are hours apart, so an older snapshot means they have stopped. */
 const STALE_AFTER_HOURS = 12;
@@ -41,6 +42,17 @@ export function isDev(finding: Pick<Finding, 'section'>): boolean {
 /** Where a pinned version was found: a file, an image, or a release's notes. */
 export function pinLocation(pin: Pick<PinFinding, 'path' | 'image' | 'tag' | 'component'>): string {
 	return pin.path ?? pin.image ?? `${pin.tag ?? 'latest release'}: ${pin.component}`;
+}
+
+/** What is failing comes first, then the rest by name, so that rows stay where they are. */
+export function listRepos(repos: RepoStatus[], query: string): RepoStatus[] {
+	const wanted = query.trim().toLowerCase();
+	return repos
+		.filter((repo) => repo.name.toLowerCase().includes(wanted))
+		.sort(
+			(a, b) =>
+				Number(b.ci === 'failing') - Number(a.ci === 'failing') || a.name.localeCompare(b.name),
+		);
 }
 
 export interface DriftFilter {

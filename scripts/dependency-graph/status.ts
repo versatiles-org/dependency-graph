@@ -11,6 +11,7 @@
  */
 
 import { buildDriftReport, type DriftReport, type DriftResult } from './drift';
+import type { RepoStatus } from './repo-status';
 
 export type StatusSection<T> = { status: 'ok'; data: T } | { status: 'failed'; error: string };
 
@@ -20,19 +21,25 @@ export interface StatusSnapshot {
 	/** When the data was collected, as an ISO date. */
 	generatedAt: string;
 	drift: StatusSection<DriftReport>;
+	repos: StatusSection<RepoStatus[]>;
+}
+
+async function section<T>(collect: () => Promise<T>): Promise<StatusSection<T>> {
+	try {
+		return { status: 'ok', data: await collect() };
+	} catch (error) {
+		return { status: 'failed', error: error instanceof Error ? error.message : String(error) };
+	}
 }
 
 export async function buildStatusSnapshot(
 	collectDrift: () => Promise<DriftResult>,
+	collectRepos: () => Promise<RepoStatus[]>,
 	{ org, now, rank }: { org: string; now: Date; rank?: (repo: string) => number },
 ): Promise<StatusSnapshot> {
-	let drift: StatusSection<DriftReport>;
-	try {
-		drift = { status: 'ok', data: buildDriftReport(await collectDrift(), rank) };
-	} catch (error) {
-		drift = { status: 'failed', error: error instanceof Error ? error.message : String(error) };
-	}
-	return { org, generatedAt: now.toISOString(), drift };
+	const drift = await section(async () => buildDriftReport(await collectDrift(), rank));
+	const repos = await section(collectRepos);
+	return { org, generatedAt: now.toISOString(), drift, repos };
 }
 
 /** Listed against the type, so that a new field cannot be forgotten here. */
@@ -57,21 +64,24 @@ export function readStatusSnapshot(text: string): StatusSnapshot | null {
 		return null;
 	}
 	if (typeof parsed !== 'object' || parsed === null) return null;
-	const { org, generatedAt, drift } = parsed as Partial<Record<keyof StatusSnapshot, unknown>>;
+	const { org, generatedAt, drift, repos } = parsed as Partial<
+		Record<keyof StatusSnapshot, unknown>
+	>;
 	if (typeof org !== 'string' || typeof generatedAt !== 'string') return null;
-	if (typeof drift !== 'object' || drift === null) return null;
 
-	const section = drift as { status?: unknown; data?: unknown; error?: unknown };
-	if (section.status === 'failed' && typeof section.error === 'string') {
-		return parsed as StatusSnapshot;
-	}
-	if (section.status !== 'ok' || typeof section.data !== 'object' || section.data === null) {
-		return null;
-	}
-	const data = section.data;
-	return Object.keys(REPORT_FIELDS).every((field) => field in data)
+	const reportUsable = (data: object): boolean =>
+		Object.keys(REPORT_FIELDS).every((field) => field in data);
+	return sectionUsable(drift, reportUsable) && sectionUsable(repos, Array.isArray)
 		? (parsed as StatusSnapshot)
 		: null;
+}
+
+/** A failed section says why, and one that succeeded has data of the right shape. */
+function sectionUsable(value: unknown, dataUsable: (data: object) => boolean): boolean {
+	if (typeof value !== 'object' || value === null) return false;
+	const { status, data, error } = value as { status?: unknown; data?: unknown; error?: unknown };
+	if (status === 'failed') return typeof error === 'string';
+	return status === 'ok' && typeof data === 'object' && data !== null && dataUsable(data);
 }
 
 export function renderStatusJson(snapshot: StatusSnapshot): string {
