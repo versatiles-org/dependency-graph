@@ -10,10 +10,11 @@
  *
  * The generated files are committed. A build therefore needs no network access,
  * and a change somewhere in the organisation arrives as a reviewable diff
- * instead of a silent deploy.
+ * instead of a silent deploy. The status snapshot is the exception: it changes
+ * with every release, so it is written for the deploy and ignored by git.
  *
- *   npm run sync:deps              # regenerate the page
- *   npm run sync:deps -- --check   # fail if it is out of date
+ *   npm run sync:deps              # regenerate the page and the status snapshot
+ *   npm run sync:deps -- --check   # fail if the page is out of date
  *   npm run sync:deps -- --cache   # reuse responses from the last run
  *   npm run sync:deps -- --drift   # report outdated versions instead (not committed)
  *   npm run sync:deps -- --drift --outdated   # … leaving out packages that are current
@@ -27,14 +28,21 @@ import * as prettier from 'prettier';
 import { loadConfig, validateConfig, CONFIG_PATH } from './dependency-graph/config';
 import { GitHub, mapLimit, type RepoInfo } from './dependency-graph/github';
 import { buildNameMaps, classify, collectEdges, type RepoFile } from './dependency-graph/collect';
-import { collectDeployments, collectDrift, renderDrift } from './dependency-graph/drift';
+import {
+	collectDeployments,
+	collectDrift,
+	renderDrift,
+	type DriftResult,
+} from './dependency-graph/drift';
 import { Progress } from './dependency-graph/progress';
 import { renderJson, renderPage } from './dependency-graph/render';
 import { sortEdges, type Graph, type RepoNode } from './dependency-graph/model';
+import { buildStatusSnapshot, renderStatusJson } from './dependency-graph/status';
 
 const ROOT = resolve(__dirname, '..');
 const TARGET_PAGE = 'index.md';
 const TARGET_DATA = 'public/dependency-graph.json';
+const TARGET_STATUS = 'public/status.json';
 
 /** Repositories the configuration says nothing about still have to go somewhere. */
 const FALLBACK_TAG = {
@@ -134,9 +142,7 @@ async function main(): Promise<void> {
 
 	const { maps, warnings: mapWarnings } = buildNameMaps(files);
 
-	// Versions change with every release anywhere in the organisation, so the
-	// drift report is printed for whoever asked and never written to the page.
-	if (drift) {
+	const collectVersions = async (): Promise<DriftResult> => {
 		if (cache) {
 			console.warn(
 				'[dependency-graph] --cache: manifests, lockfiles and registry answers may come from\n' +
@@ -163,17 +169,23 @@ async function main(): Promise<void> {
 		const result = await collectDrift(files, maps, source, tracked);
 		result.deployments = await collectDeployments(config.deployments, source, tracked);
 		lookup.finish();
+		return result;
+	};
+
+	// A repository nobody has placed yet goes last.
+	const rank = (repo: string): number => {
+		const index = config.updateOrder.indexOf(config.repositories[repo]?.[0] ?? '');
+		return index === -1 ? config.updateOrder.length : index;
+	};
+
+	if (drift) {
 		console.log(
 			'\n' +
-				renderDrift(result, {
+				renderDrift(await collectVersions(), {
 					color: Boolean(process.stdout.isTTY) && !process.env.NO_COLOR,
 					now: new Date(),
 					onlyOutdated: outdated,
-					// A repository nobody has placed yet goes last.
-					rank: (repo) => {
-						const index = config.updateOrder.indexOf(config.repositories[repo]?.[0] ?? '');
-						return index === -1 ? config.updateOrder.length : index;
-					},
+					rank,
 				}),
 		);
 		return;
@@ -259,6 +271,14 @@ async function main(): Promise<void> {
 		`[dependency-graph] ${graph.repos.length} repositories, ${graph.edges.length} dependencies` +
 			(stale.length === 0 ? ' (unchanged)' : `, updated ${stale.length} file(s)`),
 	);
+
+	const snapshot = await buildStatusSnapshot(collectVersions, new Date(), rank);
+	writeFileSync(resolve(ROOT, TARGET_STATUS), renderStatusJson(snapshot));
+	if (snapshot.drift.status === 'failed') {
+		console.warn(`[dependency-graph] status: versions not checked: ${snapshot.drift.error}`);
+	} else {
+		console.log(`[dependency-graph] status snapshot written to ${TARGET_STATUS}`);
+	}
 }
 
 main().catch((error: unknown) => {

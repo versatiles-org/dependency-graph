@@ -2,6 +2,7 @@
 .DS_Store
 .vitepress/cache
 .vitepress/dist
+public/status.json
 node_modules
 coverage
 *_PLAN.md
