@@ -837,13 +837,19 @@ export async function collectDrift(
 		return lockTexts.get(key)!;
 	};
 
+	const unreadLock = new Set<Usage>();
 	await mapLimit(usages, async (usage) => {
-		for (const candidate of lockCandidates(usage.path, usage.ecosystem)) {
-			const text = await readLock(usage.consumer, candidate);
-			if (text === null) continue;
-			usage.lockPath = candidate;
-			usage.installed = lockedVersion(usage, candidate, text);
-			return;
+		try {
+			for (const candidate of lockCandidates(usage.path, usage.ecosystem)) {
+				const text = await readLock(usage.consumer, candidate);
+				if (text === null) continue;
+				usage.lockPath = candidate;
+				usage.installed = lockedVersion(usage, candidate, text);
+				return;
+			}
+		} catch {
+			// Not the same as having no lockfile, which would be judged by its range alone.
+			unreadLock.add(usage);
 		}
 	});
 
@@ -869,7 +875,11 @@ export async function collectDrift(
 		);
 	});
 
-	const findings = usages.map((usage) => assess(usage, releases.get(releaseKey(usage)) ?? null));
+	const findings = usages.map((usage): Finding =>
+		unreadLock.has(usage)
+			? { ...assess(usage, null), note: 'lockfile could not be read' }
+			: assess(usage, releases.get(releaseKey(usage)) ?? null),
+	);
 	return { findings, releases };
 }
 

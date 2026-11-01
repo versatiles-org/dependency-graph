@@ -638,6 +638,56 @@ describe('bundled releases', () => {
 	});
 });
 
+describe('collectDrift when a lockfile cannot be read', () => {
+	const files = [
+		file('versatiles-style', 'package.json', pkg('@versatiles/style', { version: '6.0.3' })),
+		file(
+			'broken',
+			'package.json',
+			pkg('broken', { dependencies: { '@versatiles/style': '^6.0.1' } }),
+		),
+		file(
+			'working',
+			'package.json',
+			pkg('working', { dependencies: { '@versatiles/style': '^6.0.1' } }),
+		),
+		file(
+			'unlocked',
+			'package.json',
+			pkg('unlocked', { dependencies: { '@versatiles/style': '^6.0.1' } }),
+		),
+	];
+	const source: DriftSource = {
+		readFile: (repo) => {
+			if (repo === 'broken') return Promise.reject(new Error('502'));
+			if (repo === 'unlocked') return Promise.resolve(null);
+			return Promise.resolve(
+				JSON.stringify({
+					packages: { 'node_modules/@versatiles/style': { version: '6.0.1' } },
+				}),
+			);
+		},
+		latestRelease: () => Promise.resolve(null),
+		getRegistryJson: () =>
+			Promise.resolve({ 'dist-tags': { latest: '6.0.3' }, time: { '6.0.3': '2026-09-20' } }),
+	};
+
+	it('leaves that usage unknown, and the rest of the report intact', async () => {
+		const { maps } = buildNameMaps(files);
+		const { findings } = await collectDrift(files, maps, source, mapLimit);
+		const byConsumer = new Map(findings.map((finding) => [finding.consumer, finding]));
+		expect(byConsumer.get('broken')).toMatchObject({
+			status: 'unknown',
+			note: 'lockfile could not be read',
+			behind: null,
+			fix: null,
+		});
+		expect(byConsumer.get('working')?.status).toBe('stale-lock');
+		// Having no lockfile is a different thing, and still judged by its range.
+		expect(byConsumer.get('unlocked')?.status).toBe('current');
+	});
+});
+
 describe('collectDrift when a registry fails', () => {
 	it('leaves that package unknown, and the rest of the report intact', async () => {
 		const files = [
