@@ -33,8 +33,9 @@ export function formatUtc(date: string): string {
 	return `${new Date(date).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 }
 
+/** npm's `devDependencies`, and Cargo's `dev-dependencies`, which can sit inside another table. */
 export function isDev(finding: Pick<Finding, 'section'>): boolean {
-	return finding.section.startsWith('dev');
+	return /(^|\.)dev-?dependencies$/i.test(finding.section);
 }
 
 /** Some fixes are commands to run, others are instructions to read. */

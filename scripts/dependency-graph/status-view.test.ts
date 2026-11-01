@@ -40,7 +40,11 @@ describe('isDev', () => {
 	it('recognises development sections of npm and Cargo', () => {
 		expect(isDev({ section: 'devDependencies' })).toBe(true);
 		expect(isDev({ section: 'dev-dependencies' })).toBe(true);
+		expect(isDev({ section: 'workspace.dev-dependencies' })).toBe(true);
+		expect(isDev({ section: "target.'cfg(unix)'.dev-dependencies" })).toBe(true);
 		expect(isDev({ section: 'dependencies' })).toBe(false);
+		expect(isDev({ section: 'workspace.dependencies' })).toBe(false);
+		expect(isDev({ section: 'peerDependencies' })).toBe(false);
 	});
 });
 

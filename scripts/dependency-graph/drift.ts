@@ -27,7 +27,7 @@ import { dirname, posix } from 'path';
 import { styleText } from 'util';
 import semver from 'semver';
 import type { NameMaps, RepoFile } from './collect';
-import { daysAgo as age } from './status-view';
+import { daysAgo as age, isDev } from './status-view';
 
 export type Ecosystem = 'npm' | 'cargo';
 
@@ -893,7 +893,7 @@ export function renderDrift(result: DriftResult, options: ReportOptions): string
 				pad(where(row), whereWidth),
 				pad(row.installed ?? '—', installedWidth),
 				paint('dim', pad(row.requested, requestedWidth)),
-				row.section.startsWith('dev') ? paint('dim', 'dev') : '   ',
+				isDev(row) ? paint('dim', 'dev') : '   ',
 				note(row) ? paint(style.color, note(row)) : '',
 			];
 			lines.push(`  ${cells.join('  ')}`.trimEnd());
@@ -927,7 +927,7 @@ export function renderDrift(result: DriftResult, options: ReportOptions): string
 				pad(what(row), whatWidth),
 				pad(versions(row), versionsWidth),
 				paint('dim', pad(row.requested, requestedWidth)),
-				row.section.startsWith('dev') ? paint('dim', 'dev') : '   ',
+				isDev(row) ? paint('dim', 'dev') : '   ',
 				paint(style.color, note(row)),
 			];
 			lines.push(`  ${cells.join('  ')}`.trimEnd());
