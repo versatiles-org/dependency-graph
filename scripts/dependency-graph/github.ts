@@ -184,7 +184,7 @@ export class GitHub {
 	/** Tag and date of the latest release of a repository, or null if it has none. */
 	async latestRelease(org: string, repo: string): Promise<{ tag: string; date: string } | null> {
 		const release = await this.getJson<{ tag_name?: string; published_at?: string }>(
-			`https://api.github.com/repos/${org}/${repo}/releases/latest`,
+			`${API}/repos/${org}/${repo}/releases/latest`,
 		);
 		if (!release?.tag_name) return null;
 		return { tag: release.tag_name, date: release.published_at ?? '' };
