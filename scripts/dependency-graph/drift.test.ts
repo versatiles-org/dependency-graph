@@ -395,10 +395,10 @@ describe('buildDriftReport', () => {
 
 	it('counts the versions in use, newest first, and names what is not locked', () => {
 		expect(buildDriftReport(result).packages[1].spread).toEqual([
-			{ version: '^5.0.0 (unlocked)', count: 1 },
 			{ version: '6.0.3', count: 1 },
 			{ version: '6.0.1', count: 1 },
 			{ version: '5.0.0', count: 1 },
+			{ version: '^5.0.0 (unlocked)', count: 1 },
 		]);
 	});
 

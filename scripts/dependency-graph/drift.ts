@@ -793,9 +793,13 @@ export function buildDriftReport(
 			provider: findings[0].provider,
 			release: result.releases.get(key) ?? null,
 			spread: [...spread]
-				.sort(([a], [b]) =>
-					semver.valid(a) && semver.valid(b) ? semver.rcompare(a, b) : a.localeCompare(b),
-				)
+				.sort(([a], [b]) => {
+					// What is not a version, such as an unlocked range, has no place among them.
+					if (semver.valid(a) && semver.valid(b)) return semver.rcompare(a, b);
+					if (semver.valid(a)) return -1;
+					if (semver.valid(b)) return 1;
+					return a.localeCompare(b);
+				})
 				.map(([version, count]) => ({ version, count })),
 			usages: [...findings].sort(
 				(a, b) =>
