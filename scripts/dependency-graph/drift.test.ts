@@ -361,6 +361,47 @@ describe('collectDrift', () => {
 	});
 });
 
+describe('collectDrift when a registry fails', () => {
+	it('leaves that package unknown, and the rest of the report intact', async () => {
+		const files = [
+			file('versatiles-style', 'package.json', pkg('@versatiles/style', { version: '6.0.3' })),
+			file('versatiles-fonts', 'package.json', pkg('@versatiles/fonts', { version: '2.0.0' })),
+			file(
+				'frontend',
+				'package.json',
+				pkg('frontend', {
+					dependencies: { '@versatiles/style': '^6.0.1', '@versatiles/fonts': '^2.0.0' },
+				}),
+			),
+		];
+		const { maps } = buildNameMaps(files);
+		const source: DriftSource = {
+			readFile: () =>
+				Promise.resolve(
+					JSON.stringify({
+						packages: {
+							'node_modules/@versatiles/style': { version: '6.0.1' },
+							'node_modules/@versatiles/fonts': { version: '2.0.0' },
+						},
+					}),
+				),
+			latestRelease: () => Promise.resolve(null),
+			getRegistryJson: (url) =>
+				url.includes('style')
+					? Promise.reject(new Error('503'))
+					: Promise.resolve({ 'dist-tags': { latest: '2.0.0' } }),
+		};
+
+		const result = await collectDrift(files, maps, source, mapLimit);
+		expect(result.findings.map((f) => `${f.name} ${f.status}`).sort()).toEqual([
+			'@versatiles/fonts current',
+			'@versatiles/style unknown',
+		]);
+		// Not the version on main: that would pass off a guess as the latest release.
+		expect(result.releases.get('npm:@versatiles/style')).toBeNull();
+	});
+});
+
 describe('buildDriftReport', () => {
 	const style = release('6.0.3');
 	const core = usage({ name: '@versatiles/core', provider: 'versatiles-core' });
@@ -661,6 +702,26 @@ describe('deployments', () => {
 			mapLimit,
 		);
 		expect(reports[0]).toMatchObject({ reachable: false, findings: [] });
+	});
+
+	it('leaves one component unknown when its latest release cannot be read', async () => {
+		const reports = await collectDeployments(
+			[deployment],
+			{
+				getRegistryJson: () =>
+					Promise.resolve({ versatiles: '5.4.0', frontend: '3.16.1', styles: '7.0.1' }),
+				latestRelease: (repo) =>
+					repo === 'versatiles-rs'
+						? Promise.reject(new Error('502'))
+						: Promise.resolve(release(repo === 'versatiles-style' ? 'v7.0.1' : 'v3.16.1')),
+			},
+			mapLimit,
+		);
+		expect(
+			Object.fromEntries(
+				reports[0].findings.map((finding) => [finding.component, finding.status]),
+			),
+		).toEqual({ versatiles: 'unknown', frontend: 'current', styles: 'current' });
 	});
 
 	it('asks each repository for its latest release once', async () => {

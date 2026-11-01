@@ -571,7 +571,8 @@ export async function collectDeployments(
 	const providers = [...new Set(deployments.flatMap((entry) => Object.values(entry.components)))];
 	const latest = new Map<string, Release | null>();
 	await mapLimit(providers, async (repo) => {
-		latest.set(repo, await source.latestRelease(repo));
+		// A failed lookup leaves this one component unknown, not the whole report.
+		latest.set(repo, await source.latestRelease(repo).catch(() => null));
 	});
 	return mapLimit(deployments, async (deployment) => {
 		// A deployment that is down should not cost the rest of the report.
@@ -613,11 +614,20 @@ export async function collectDrift(
 	const keys = [...new Map(usages.map((usage) => [releaseKey(usage), usage])).values()];
 	const releases = new Map<string, Release | null>();
 	await mapLimit(keys, async ({ ecosystem, name }) => {
-		const body = await source.getRegistryJson(registryUrl(ecosystem, name));
+		const key = releaseKey({ ecosystem, name });
+		let body: unknown;
+		try {
+			body = await source.getRegistryJson(registryUrl(ecosystem, name));
+		} catch {
+			// Unknown for this package alone. The version on main is no stand-in here:
+			// it is for what is not published, and this may well be.
+			releases.set(key, null);
+			return;
+		}
 		const published = parseRegistry(ecosystem, body);
 		const version = fromManifest.get(name);
 		releases.set(
-			releaseKey({ ecosystem, name }),
+			key,
 			published ?? (version ? { version, date: null, source: 'manifest' } : null),
 		);
 	});
