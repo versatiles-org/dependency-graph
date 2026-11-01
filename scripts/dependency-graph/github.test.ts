@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GitHub, mapLimit, type RepoInfo } from './github';
+import { GitHub, isCacheFresh, mapLimit, type RepoInfo } from './github';
 
 /** A token from the environment keeps the constructor away from the `gh` binary. */
 function client(): GitHub {
@@ -59,6 +59,16 @@ describe('mapLimit', () => {
 
 	it('copes with nothing to do', async () => {
 		expect(await mapLimit([], () => Promise.resolve(null))).toEqual([]);
+	});
+});
+
+describe('isCacheFresh', () => {
+	const HOUR = 3_600_000;
+
+	it('keeps a response for a day, and no longer', () => {
+		expect(isCacheFresh(0, 23 * HOUR)).toBe(true);
+		expect(isCacheFresh(0, 24 * HOUR)).toBe(false);
+		expect(isCacheFresh(0, 200 * HOUR)).toBe(false);
 	});
 });
 

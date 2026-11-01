@@ -15,7 +15,7 @@
  *
  *   npm run sync:deps              # regenerate the page and the status snapshot
  *   npm run sync:deps -- --check   # fail if the page is out of date
- *   npm run sync:deps -- --cache   # reuse responses from the last run
+ *   npm run sync:deps -- --cache   # reuse responses from the last 24 hours
  *   npm run sync:deps -- --drift   # report outdated versions instead (not committed)
  *   npm run sync:deps -- --drift --outdated   # … leaving out packages that are current
  *

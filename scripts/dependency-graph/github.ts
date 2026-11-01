@@ -12,7 +12,7 @@
 
 import { execFileSync } from 'child_process';
 import { createHash } from 'crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
 const API = 'https://api.github.com';
@@ -100,6 +100,13 @@ function resolveToken(): string | undefined {
 /** Marker stored in the cache for a 404, so misses are not retried. */
 const CACHED_404 = ' 404';
 
+/** Long enough for a day of working on the scripts, short enough not to pass for current. */
+const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+export function isCacheFresh(modifiedMs: number, nowMs: number): boolean {
+	return nowMs - modifiedMs < CACHE_MAX_AGE_MS;
+}
+
 export class GitHub {
 	private readonly headers: Record<string, string>;
 	/** Set only with --cache: a developer convenience, never used by CI. */
@@ -138,7 +145,7 @@ export class GitHub {
 	/** Returns the response body, or null for 404. Retries transient failures. */
 	private async get(url: string, headers = this.headers): Promise<string | null> {
 		const cached = this.cachePath(url);
-		if (cached && existsSync(cached)) {
+		if (cached && existsSync(cached) && isCacheFresh(statSync(cached).mtimeMs, Date.now())) {
 			const body = readFileSync(cached, 'utf8');
 			return body === CACHED_404 ? null : body;
 		}
