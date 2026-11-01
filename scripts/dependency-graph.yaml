@@ -112,14 +112,12 @@ images:
   versatiles/versatiles-gdal: versatiles-docker
   versatiles/versatiles-nginx: versatiles-docker
   versatiles/versatiles-planetiler: versatiles-docker
-  versatiles/versatiles-tilemaker: versatiles-docker
   versatiles/versatiles-tippecanoe: versatiles-docker
   ghcr.io/versatiles-org/versatiles: versatiles-docker
   ghcr.io/versatiles-org/versatiles-frontend: versatiles-docker
   ghcr.io/versatiles-org/versatiles-gdal: versatiles-docker
   ghcr.io/versatiles-org/versatiles-nginx: versatiles-docker
   ghcr.io/versatiles-org/versatiles-planetiler: versatiles-docker
-  ghcr.io/versatiles-org/versatiles-tilemaker: versatiles-docker
   ghcr.io/versatiles-org/versatiles-tippecanoe: versatiles-docker
   ghcr.io/versatiles-org/versatiles-choro: versatiles-choro
   ghcr.io/versatiles-org/versatiles-map-animator: versatiles-map-animator
