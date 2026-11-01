@@ -3,7 +3,14 @@
  * runs in the browser, so unlike `drift.ts` it may only import types from there.
  */
 
-import type { DependentReport, DriftReport, Finding, PackageReport, PinFinding } from './drift';
+import type {
+	DependentReport,
+	DeploymentReport,
+	DriftReport,
+	Finding,
+	PackageReport,
+	PinFinding,
+} from './drift';
 import type { RepoStatus } from './repo-status';
 
 /** Scheduled runs are hours apart, so an older snapshot means they have stopped. */
@@ -53,6 +60,32 @@ export function listRepos(repos: RepoStatus[], query: string): RepoStatus[] {
 			(a, b) =>
 				Number(b.ci === 'failing') - Number(a.ci === 'failing') || a.name.localeCompare(b.name),
 		);
+}
+
+/** Finds a pin by the repository holding it, the one it names, or where it is. */
+export function filterPins(pins: PinFinding[], query: string): PinFinding[] {
+	const wanted = query.trim().toLowerCase();
+	return pins.filter((pin) =>
+		[pin.repo, pin.provider ?? '', pinLocation(pin)].some((text) =>
+			text.toLowerCase().includes(wanted),
+		),
+	);
+}
+
+/** Finds a deployment by its repository, or just the components that match. */
+export function filterDeployments(
+	deployments: DeploymentReport[],
+	query: string,
+): DeploymentReport[] {
+	const wanted = query.trim().toLowerCase();
+	const matches = (text: string): boolean => text.toLowerCase().includes(wanted);
+	return deployments.flatMap((deployment): DeploymentReport[] => {
+		if (matches(deployment.repo)) return [deployment];
+		const findings = deployment.findings.filter(
+			(finding) => matches(finding.component) || matches(finding.provider ?? ''),
+		);
+		return findings.length > 0 ? [{ ...deployment, findings }] : [];
+	});
 }
 
 export interface DriftFilter {

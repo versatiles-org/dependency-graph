@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { assess, buildDriftReport, type Release, type Usage } from './drift';
+import {
+	assess,
+	buildDriftReport,
+	type DeploymentFinding,
+	type DeploymentReport,
+	type PinFinding,
+	type Release,
+	type Usage,
+} from './drift';
 import type { RepoStatus } from './repo-status';
 import {
 	daysAgo,
+	filterDeployments,
 	filterDrift,
+	filterPins,
 	formatUtc,
 	hoursAgo,
 	isDev,
@@ -94,6 +104,83 @@ describe('listRepos', () => {
 	it('leaves the list it was given in its order', () => {
 		listRepos(repos, '');
 		expect(repos[0].name).toBe('c');
+	});
+});
+
+describe('filterPins', () => {
+	const pin = (overrides: Partial<PinFinding>): PinFinding => ({
+		repo: 'homebrew-versatiles',
+		path: null,
+		image: null,
+		tag: null,
+		component: null,
+		provider: 'versatiles-rs',
+		pinned: '1.0.0',
+		latest: null,
+		status: 'current',
+		behind: null,
+		note: '',
+		...overrides,
+	});
+	const pins = [
+		pin({ path: 'Formula/versatiles.rb' }),
+		pin({ repo: 'versatiles-docker', image: 'versatiles/versatiles-nginx' }),
+		pin({
+			repo: 'versatiles-frontend',
+			provider: 'versatiles-style',
+			tag: 'v1.0.0',
+			component: 'VersaTiles Style',
+		}),
+		pin({ repo: 'versatiles-frontend', provider: null, component: 'Brand New Thing' }),
+	];
+	const found = (query: string) => filterPins(pins, query).map((entry) => pinLocation(entry));
+
+	it('keeps everything without a query', () => {
+		expect(filterPins(pins, ' ')).toHaveLength(4);
+	});
+
+	it('finds a pin by its repository, what it names, or where it is', () => {
+		expect(found('HOMEBREW')).toEqual(['Formula/versatiles.rb']);
+		expect(found('versatiles-style')).toEqual(['v1.0.0: VersaTiles Style']);
+		expect(found('nginx')).toEqual(['versatiles/versatiles-nginx']);
+		expect(found('brand new')).toEqual(['latest release: Brand New Thing']);
+		expect(found('nothing like it')).toEqual([]);
+	});
+});
+
+describe('filterDeployments', () => {
+	const finding = (component: string, provider: string | null): DeploymentFinding => ({
+		component,
+		provider,
+		deployed: '1.0.0',
+		latest: null,
+		status: 'current',
+		behind: null,
+		note: '',
+	});
+	const deployments: DeploymentReport[] = [
+		{
+			repo: 'tiles.versatiles.org',
+			url: 'https://example.org',
+			components: {},
+			updated: null,
+			reachable: true,
+			findings: [finding('frontend', 'versatiles-frontend'), finding('other', null)],
+		},
+	];
+
+	it('keeps a whole deployment when its repository matches', () => {
+		expect(filterDeployments(deployments, 'tiles')[0].findings).toHaveLength(2);
+		expect(filterDeployments(deployments, '')).toEqual(deployments);
+	});
+
+	it('narrows a deployment down to the components that match', () => {
+		expect(filterDeployments(deployments, 'versatiles-frontend')[0].findings).toHaveLength(1);
+		expect(filterDeployments(deployments, 'OTHER')[0].findings[0].component).toBe('other');
+	});
+
+	it('leaves out a deployment with nothing that matches', () => {
+		expect(filterDeployments(deployments, 'nothing like it')).toEqual([]);
 	});
 });
 

@@ -4,7 +4,9 @@ import { data } from '../../../status.data';
 import type { PinFinding, Status } from '../../../scripts/dependency-graph/drift';
 import {
 	daysAgo,
+	filterDeployments,
 	filterDrift,
+	filterPins,
 	formatUtc,
 	hoursAgo,
 	isDev,
@@ -16,12 +18,27 @@ import type { CiState } from '../../../scripts/dependency-graph/repo-status';
 import { buildQueueGraph, type GraphEdge } from '../../../scripts/dependency-graph/queue-graph';
 
 /** The same marks as the terminal report, so colour never has to speak alone. */
-const STATUS: Record<Status, { mark: string; label: string; count: string }> = {
-	range: { mark: '✗', label: 'Range excludes latest', count: 'ranges exclude latest' },
-	'stale-lock': { mark: '↑', label: 'Lockfile behind', count: 'lockfiles behind' },
-	unknown: { mark: '?', label: 'Unknown', count: 'unknown' },
-	ahead: { mark: '»', label: 'Ahead of latest', count: 'ahead of latest' },
-	current: { mark: '✓', label: 'Current', count: 'current' },
+const STATUS: Record<Status, { mark: string; label: string; one: string; many: string }> = {
+	range: {
+		mark: '✗',
+		label: 'Range excludes latest',
+		one: 'version range excludes the latest release',
+		many: 'version ranges exclude the latest release',
+	},
+	'stale-lock': {
+		mark: '↑',
+		label: 'Lockfile behind',
+		one: 'lockfile behind',
+		many: 'lockfiles behind',
+	},
+	unknown: { mark: '?', label: 'Unknown', one: 'unknown', many: 'unknown' },
+	ahead: {
+		mark: '»',
+		label: 'Ahead of latest',
+		one: 'ahead of the latest release',
+		many: 'ahead of the latest release',
+	},
+	current: { mark: '✓', label: 'Up to date', one: 'up to date', many: 'up to date' },
 };
 const ORDER = Object.keys(STATUS) as Status[];
 
@@ -71,7 +88,16 @@ const filtered = computed(() =>
 );
 const filtering = computed(() => query.value.trim() !== '' || hideDev.value);
 const listedRepos = computed(() => listRepos(repoStatus ?? [], query.value));
+const listedPins = computed(() => filterPins(report?.pins ?? [], query.value));
+const listedDeployments = computed(() => filterDeployments(report?.deployments ?? [], query.value));
 const when = (date: string): string => (now.value ? daysAgo(date, now.value) : date.slice(0, 10));
+
+/** What a pinned version or a running component needs, starting like the labels around it. */
+function stateText(row: { status: string; note: string; behind: string | null }): string {
+	if (row.status === 'current') return STATUS.current.label;
+	const note = row.note.charAt(0).toUpperCase() + row.note.slice(1);
+	return row.behind ? `${note} (${row.behind} behind)` : note;
+}
 
 /** One tick per usage, worst first. */
 const ticks = computed(() =>
@@ -94,7 +120,7 @@ const behindLeft = computed(() => GRAPH_LEFT + graph.value.width);
 const updateLeft = computed(() => behindLeft.value + 88);
 const graphMinWidth = computed(() => updateLeft.value + 240);
 
-/** Pointing at a row isolates its lines, and clicking keeps them isolated. */
+/** Pointing at a row highlights its lines, and clicking keeps them highlighted. */
 const pinned = ref<string | null>(null);
 const hovered = ref<string | null>(null);
 const active = computed(() => {
@@ -132,24 +158,28 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 
 		<template v-else>
 			<p class="snapshot" :class="{ stale }">
-				Snapshot from {{ formatUtc(data.generatedAt) }}
-				<template v-if="snapshotAge">({{ snapshotAge }})</template>
-				<template v-if="stale"
-					>. Scheduled runs may have stopped, so this can be out of date.</template
-				>
+				Data from {{ formatUtc(data.generatedAt) }}
+				<template v-if="snapshotAge">({{ snapshotAge }})</template
+				><template v-if="stale"
+					>. Updates should run every six hours, so they may have stopped.</template
+				><template v-else>. Updated every six hours.</template>
 			</p>
 
 			<p v-if="driftError" class="notice failed">
-				Versions were not checked in this snapshot, and the next scheduled run tries again.
+				The latest update could not check versions. The next one tries again.
 				<code>{{ driftError }}</code>
 			</p>
 
 			<template v-if="report">
 				<section class="overview" aria-label="Summary">
+					<p class="strip-title">
+						{{ report.totals.usages }} dependencies on {{ report.packages.length }} of our own
+						packages
+					</p>
 					<div
 						class="strip"
 						role="img"
-						:aria-label="`${report.totals.usages} usages of ${report.packages.length} packages`"
+						:aria-label="`${report.totals.usages} dependencies on ${report.packages.length} packages`"
 					>
 						<span
 							v-for="(status, index) in ticks"
@@ -164,17 +194,31 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 							<strong>{{ report.totals.byStatus[status] }}</strong>
 							{{
 								report.totals.byStatus[status] === 1
-									? STATUS[status].label.toLowerCase()
-									: STATUS[status].count
+									? STATUS[status].one
+									: STATUS[status].many
 							}}
 						</li>
+					</ul>
+					<ul class="legend">
 						<li>
 							<strong>{{ report.totals.pinsBehind }}</strong>
-							pinned behind
+							<a href="#pinned-releases"
+								>{{
+									report.totals.pinsBehind === 1 ? 'pinned release' : 'pinned releases'
+								}}
+								behind</a
+							>
 						</li>
 						<li>
 							<strong>{{ report.totals.deploymentsBehind }}</strong>
-							deployed behind
+							<a href="#deployments"
+								>{{
+									report.totals.deploymentsBehind === 1
+										? 'deployed component'
+										: 'deployed components'
+								}}
+								behind</a
+							>
 						</li>
 						<li v-if="ciFailing !== null">
 							<strong>{{ ciFailing }}</strong>
@@ -196,7 +240,7 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 					</label>
 				</div>
 
-				<section>
+				<section id="outdated-dependencies">
 					<h2>Outdated dependencies</h2>
 					<p class="hint">
 						Work from the top. Each repository comes after the ones it builds on, so nothing
@@ -204,7 +248,7 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 					</p>
 					<ul class="graph-key">
 						<li>
-							Each colour is one package. A line curves up into the package it depends on.
+							Each colour is one package. A line curves up into what the repository uses.
 						</li>
 						<li>
 							<svg width="32" height="8" viewBox="0 0 32 8" aria-hidden="true">
@@ -212,7 +256,17 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 							</svg>
 							Development dependency
 						</li>
-						<li>Point at a row to isolate its lines, or click to keep them isolated.</li>
+						<li>
+							<span class="mark is-range" aria-hidden="true">{{ STATUS.range.mark }}</span>
+							The version range has to change
+						</li>
+						<li>
+							<span class="mark is-stale-lock" aria-hidden="true">{{
+								STATUS['stale-lock'].mark
+							}}</span>
+							A lockfile update is enough
+						</li>
+						<li>Point at a row to highlight its lines, or click to keep them highlighted.</li>
 					</ul>
 					<div v-if="graph.rows.length > 0" class="scroll" tabindex="0">
 						<div
@@ -221,12 +275,12 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 						>
 							<div class="graph-head">
 								<span :style="{ left: '36px' }">Repository and package</span>
-								<span :style="{ left: `${GRAPH_LEFT}px` }">Dependencies</span>
+								<span :style="{ left: `${GRAPH_LEFT}px` }">Depends on</span>
 								<span :style="{ left: `${behindLeft}px` }">Behind</span>
 								<span :style="{ left: `${updateLeft}px` }">Update</span>
 							</div>
 							<h3 v-if="graph.hasReleases" class="graph-group" :style="{ top: '40px' }">
-								Latest releases
+								Packages with a newer release
 							</h3>
 							<h3 class="graph-group" :style="{ top: `${graph.queueLabelTop}px` }">
 								Repositories to update, in order
@@ -250,7 +304,7 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 									type="button"
 									class="graph-row-select"
 									:aria-pressed="pinned === row.repo"
-									:aria-label="`Isolate the lines of ${row.repo}`"
+									:aria-label="`Highlight the lines of ${row.repo}`"
 									@click="togglePin(row.repo)"
 									@focus="hovered = row.repo"
 									@blur="hovered = null"
@@ -364,19 +418,251 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 						</div>
 					</div>
 					<p v-else class="empty">
-						{{ filtering ? 'No outdated usage matches the filter.' : 'Nothing to update.' }}
+						{{
+							filtering ? 'No outdated dependency matches the filter.' : 'Nothing to update.'
+						}}
 					</p>
 				</section>
 
-				<section>
+				<section v-if="report.pins.length > 0" id="pinned-releases">
+					<h2>Pinned releases</h2>
+					<p class="hint">
+						Exact versions fixed in a file, an image tag or a bundled release. References to
+						"latest" are left out, because they cannot fall behind.
+					</p>
+					<div v-if="listedPins.length > 0" class="scroll" tabindex="0">
+						<table>
+							<thead>
+								<tr>
+									<th scope="col">Repository</th>
+									<th scope="col">Pinned in</th>
+									<th scope="col">Version</th>
+									<th scope="col">Latest</th>
+									<th scope="col">Released by</th>
+									<th scope="col">State</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr
+									v-for="pin in listedPins"
+									:key="`${pin.repo} ${pinLocation(pin)} ${pin.provider}`"
+								>
+									<td class="nowrap">
+										<a :href="repoUrl(pin.repo)">{{ pin.repo }}</a>
+									</td>
+									<td class="nowrap">
+										<a v-if="pin.path" :href="fileUrl(pin.repo, pin.path)">{{
+											pin.path
+										}}</a>
+										<a
+											v-else-if="pin.image"
+											:href="`https://hub.docker.com/r/${pin.image}`"
+											>{{ pin.image }}</a
+										>
+										<a
+											v-else
+											:href="`${repoUrl(pin.repo)}/releases/${pin.tag ? `tag/${pin.tag}` : 'latest'}`"
+											>{{ pinLocation(pin) }}</a
+										>
+									</td>
+									<td class="mono nowrap">{{ pin.pinned ?? '—' }}</td>
+									<td class="mono nowrap">{{ pin.latest?.version ?? '—' }}</td>
+									<td class="nowrap">
+										<a v-if="pin.provider" :href="repoUrl(pin.provider)">{{
+											pin.provider
+										}}</a>
+										<template v-else>—</template>
+									</td>
+									<td class="nowrap">
+										<span
+											class="mark"
+											:class="`is-${PIN_STATUS[pin.status].tone}`"
+											aria-hidden="true"
+										>
+											{{ PIN_STATUS[pin.status].mark }}
+										</span>
+										{{ stateText(pin) }}
+									</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+					<p v-else class="empty">No pinned release matches the filter.</p>
+				</section>
+
+				<section v-if="report.deployments.length > 0" id="deployments">
+					<h2>Deployments</h2>
+					<p class="hint">What our public services run, compared with the latest releases.</p>
+					<p v-if="listedDeployments.length === 0" class="empty">
+						No deployment matches the filter.
+					</p>
+					<div
+						v-for="deployment in listedDeployments"
+						:key="deployment.repo"
+						class="deployment"
+					>
+						<p class="deployment-name">
+							<a :href="repoUrl(deployment.repo)">{{ deployment.repo }}</a>
+							<span v-if="deployment.updated" class="dim">
+								last deployed {{ when(deployment.updated) }}
+							</span>
+						</p>
+						<p v-if="!deployment.reachable" class="notice failed">
+							Could not read the versions from <code>{{ deployment.url }}</code
+							>.
+						</p>
+						<div v-else class="scroll" tabindex="0">
+							<table>
+								<thead>
+									<tr>
+										<th scope="col">Component</th>
+										<th scope="col">Running</th>
+										<th scope="col">Latest</th>
+										<th scope="col">Released by</th>
+										<th scope="col">State</th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr v-for="row in deployment.findings" :key="row.component">
+										<td>{{ row.component }}</td>
+										<td class="mono nowrap">{{ row.deployed ?? '—' }}</td>
+										<td class="mono nowrap">{{ row.latest?.version ?? '—' }}</td>
+										<td>
+											<a v-if="row.provider" :href="repoUrl(row.provider)">{{
+												row.provider
+											}}</a>
+											<template v-else>—</template>
+										</td>
+										<td class="nowrap">
+											<span
+												class="mark"
+												:class="`is-${PIN_STATUS[row.status].tone}`"
+												aria-hidden="true"
+											>
+												{{ PIN_STATUS[row.status].mark }}
+											</span>
+											{{ stateText(row) }}
+										</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+					</div>
+				</section>
+			</template>
+
+			<!-- Outside the report: a failure there says nothing about the repositories. -->
+			<section id="repositories">
+				<h2>Repositories</h2>
+				<p v-if="reposError" class="notice failed">
+					The latest update could not check the repositories. The next one tries again.
+					<code>{{ reposError }}</code>
+				</p>
+				<template v-else>
+					<p class="hint">
+						What is open, whether the default branch passes, and what is waiting to be
+						released. Repositories with failing CI come first.
+					</p>
+					<div v-if="listedRepos.length > 0" class="scroll" tabindex="0">
+						<table>
+							<thead>
+								<tr>
+									<th scope="col">Repository</th>
+									<th scope="col">CI</th>
+									<th scope="col">Issues</th>
+									<th scope="col">Pull requests</th>
+									<th scope="col">Last commit</th>
+									<th scope="col">Latest release</th>
+									<th scope="col">Unreleased commits</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr v-for="repo in listedRepos" :key="repo.name">
+									<td class="nowrap">
+										<a :href="repoUrl(repo.name)">{{ repo.name }}</a>
+									</td>
+									<td class="nowrap">
+										<a
+											v-if="repo.ci !== 'none'"
+											class="ci"
+											:class="`is-${CI_STATE[repo.ci].tone}`"
+											:href="`${repoUrl(repo.name)}/actions`"
+										>
+											<span class="mark" aria-hidden="true">{{
+												CI_STATE[repo.ci].mark
+											}}</span>
+											{{ CI_STATE[repo.ci].label }}
+										</a>
+										<span v-else class="dim">{{ CI_STATE.none.label }}</span>
+									</td>
+									<td class="count" :class="{ dim: repo.issues === 0 }">
+										<a v-if="repo.issues > 0" :href="`${repoUrl(repo.name)}/issues`">{{
+											repo.issues
+										}}</a>
+										<template v-else>0</template>
+									</td>
+									<td class="nowrap count" :class="{ dim: repo.pulls === 0 }">
+										<a v-if="repo.pulls > 0" :href="`${repoUrl(repo.name)}/pulls`">{{
+											repo.pulls
+										}}</a>
+										<template v-else>0</template>
+										<span v-if="repo.botPulls > 0" class="dim">
+											({{ repo.botPulls }} from bots)</span
+										>
+									</td>
+									<td class="nowrap dim">
+										{{ repo.lastCommit ? when(repo.lastCommit) : '—' }}
+									</td>
+									<td class="nowrap">
+										<template v-if="repo.release">
+											<a
+												class="mono"
+												:href="`${repoUrl(repo.name)}/releases/tag/${repo.release.tag}`"
+												>{{ repo.release.tag }}</a
+											>
+											<span v-if="repo.release.date" class="dim release-date">
+												{{ when(repo.release.date) }}</span
+											>
+										</template>
+										<span v-else class="dim">—</span>
+									</td>
+									<td class="count" :class="{ dim: !repo.unreleased }">
+										<a
+											v-if="repo.unreleased && repo.release"
+											:href="`${repoUrl(repo.name)}/compare/${repo.release.tag}...${repo.branch}`"
+											>{{ repo.unreleased }}</a
+										>
+										<template v-else>{{ repo.unreleased ?? '—' }}</template>
+									</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+					<p v-else class="empty">No repository matches the filter.</p>
+				</template>
+			</section>
+
+			<template v-if="report">
+				<section id="packages">
 					<div class="heading">
-						<h2>Packages</h2>
+						<h2>All packages</h2>
 						<label class="toggle">
 							<input v-model="onlyOutdated" type="checkbox" />
-							Hide fully current packages
+							Only show outdated packages
 						</label>
 					</div>
+					<p class="hint">
+						Every package of ours that a repository depends on, and the versions in use. Open
+						one to see who uses it.
+					</p>
 					<div v-if="filtered.packages.length > 0" class="packages">
+						<div class="packages-head">
+							<span></span>
+							<span>Package</span>
+							<span>Latest</span>
+							<span>Released</span>
+							<span>Versions in use</span>
+						</div>
 						<details
 							v-for="entry in filtered.packages"
 							:key="`${entry.ecosystem} ${entry.name}`"
@@ -458,223 +744,11 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 						{{
 							filtering
 								? 'No package matches the filter.'
-								: 'Every package is current everywhere it is used.'
+								: 'Every package is up to date everywhere it is used.'
 						}}
 					</p>
 				</section>
-
-				<section v-if="report.pins.length > 0">
-					<h2>Pinned releases</h2>
-					<p class="hint">
-						Exact releases named in a file, an image tag or the notes of a release that
-						bundles them. References to the latest release are not listed, because they cannot
-						fall behind.
-					</p>
-					<div class="scroll" tabindex="0">
-						<table>
-							<thead>
-								<tr>
-									<th scope="col">Repository</th>
-									<th scope="col">Pinned in</th>
-									<th scope="col">Pinned</th>
-									<th scope="col">Latest</th>
-									<th scope="col">From</th>
-									<th scope="col">State</th>
-								</tr>
-							</thead>
-							<tbody>
-								<tr
-									v-for="pin in report.pins"
-									:key="`${pin.repo} ${pinLocation(pin)} ${pin.provider}`"
-								>
-									<td class="nowrap">
-										<a :href="repoUrl(pin.repo)">{{ pin.repo }}</a>
-									</td>
-									<td class="nowrap">
-										<a v-if="pin.path" :href="fileUrl(pin.repo, pin.path)">{{
-											pin.path
-										}}</a>
-										<a
-											v-else-if="pin.image"
-											:href="`https://hub.docker.com/r/${pin.image}`"
-											>{{ pin.image }}</a
-										>
-										<a
-											v-else
-											:href="`${repoUrl(pin.repo)}/releases/${pin.tag ? `tag/${pin.tag}` : 'latest'}`"
-											>{{ pinLocation(pin) }}</a
-										>
-									</td>
-									<td class="mono nowrap">{{ pin.pinned ?? '—' }}</td>
-									<td class="mono nowrap">{{ pin.latest?.version ?? '—' }}</td>
-									<td class="nowrap">
-										<a v-if="pin.provider" :href="repoUrl(pin.provider)">{{
-											pin.provider
-										}}</a>
-										<template v-else>—</template>
-									</td>
-									<td>
-										<span
-											class="mark"
-											:class="`is-${PIN_STATUS[pin.status].tone}`"
-											aria-hidden="true"
-										>
-											{{ PIN_STATUS[pin.status].mark }}
-										</span>
-										{{ pin.status === 'current' ? 'Current' : pin.note }}
-										<template v-if="pin.behind">({{ pin.behind }} behind)</template>
-									</td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
-				</section>
-
-				<section v-if="report.deployments.length > 0">
-					<h2>Deployments</h2>
-					<div
-						v-for="deployment in report.deployments"
-						:key="deployment.repo"
-						class="deployment"
-					>
-						<p class="deployment-name">
-							<a :href="repoUrl(deployment.repo)">{{ deployment.repo }}</a>
-							<span v-if="deployment.updated" class="dim">
-								updated
-								{{
-									now ? daysAgo(deployment.updated, now) : deployment.updated.slice(0, 10)
-								}}
-							</span>
-						</p>
-						<p v-if="!deployment.reachable" class="notice failed">
-							Could not read the versions from <code>{{ deployment.url }}</code
-							>.
-						</p>
-						<div v-else class="scroll" tabindex="0">
-							<table>
-								<thead>
-									<tr>
-										<th scope="col">Component</th>
-										<th scope="col">Running</th>
-										<th scope="col">Latest</th>
-										<th scope="col">From</th>
-										<th scope="col">State</th>
-									</tr>
-								</thead>
-								<tbody>
-									<tr v-for="row in deployment.findings" :key="row.component">
-										<td>{{ row.component }}</td>
-										<td class="mono nowrap">{{ row.deployed ?? '—' }}</td>
-										<td class="mono nowrap">{{ row.latest?.version ?? '—' }}</td>
-										<td>
-											<a v-if="row.provider" :href="repoUrl(row.provider)">{{
-												row.provider
-											}}</a>
-											<template v-else>—</template>
-										</td>
-										<td>
-											{{ row.status === 'current' ? 'Current' : row.note }}
-											<template v-if="row.behind">({{ row.behind }} behind)</template>
-										</td>
-									</tr>
-								</tbody>
-							</table>
-						</div>
-					</div>
-				</section>
 			</template>
-
-			<!-- Outside the report: a failure there says nothing about the repositories. -->
-			<section id="repositories">
-				<h2>Repositories</h2>
-				<p v-if="reposError" class="notice failed">
-					Repositories were not checked in this snapshot, and the next scheduled run tries
-					again.
-					<code>{{ reposError }}</code>
-				</p>
-				<template v-else>
-					<p class="hint">
-						What is open, whether the default branch passes, and what is waiting to be
-						released. Failing repositories come first.
-					</p>
-					<div v-if="listedRepos.length > 0" class="scroll" tabindex="0">
-						<table>
-							<thead>
-								<tr>
-									<th scope="col">Repository</th>
-									<th scope="col">CI</th>
-									<th scope="col">Issues</th>
-									<th scope="col">Pull requests</th>
-									<th scope="col">Last commit</th>
-									<th scope="col">Latest release</th>
-									<th scope="col">Unreleased commits</th>
-								</tr>
-							</thead>
-							<tbody>
-								<tr v-for="repo in listedRepos" :key="repo.name">
-									<td class="nowrap">
-										<a :href="repoUrl(repo.name)">{{ repo.name }}</a>
-									</td>
-									<td class="nowrap">
-										<a
-											v-if="repo.ci !== 'none'"
-											class="ci"
-											:class="`is-${CI_STATE[repo.ci].tone}`"
-											:href="`${repoUrl(repo.name)}/actions`"
-										>
-											<span class="mark" aria-hidden="true">{{
-												CI_STATE[repo.ci].mark
-											}}</span>
-											{{ CI_STATE[repo.ci].label }}
-										</a>
-										<span v-else class="dim">{{ CI_STATE.none.label }}</span>
-									</td>
-									<td class="count" :class="{ dim: repo.issues === 0 }">
-										<a v-if="repo.issues > 0" :href="`${repoUrl(repo.name)}/issues`">{{
-											repo.issues
-										}}</a>
-										<template v-else>0</template>
-									</td>
-									<td class="nowrap count" :class="{ dim: repo.pulls === 0 }">
-										<a v-if="repo.pulls > 0" :href="`${repoUrl(repo.name)}/pulls`">{{
-											repo.pulls
-										}}</a>
-										<template v-else>0</template>
-										<span v-if="repo.botPulls > 0" class="dim">
-											({{ repo.botPulls }} from bots)</span
-										>
-									</td>
-									<td class="nowrap dim">
-										{{ repo.lastCommit ? when(repo.lastCommit) : '—' }}
-									</td>
-									<td class="nowrap">
-										<template v-if="repo.release">
-											<a
-												class="mono"
-												:href="`${repoUrl(repo.name)}/releases/tag/${repo.release.tag}`"
-												>{{ repo.release.tag }}</a
-											>
-											<span v-if="repo.release.date" class="dim release-date">
-												{{ when(repo.release.date) }}</span
-											>
-										</template>
-										<span v-else class="dim">—</span>
-									</td>
-									<td class="count" :class="{ dim: !repo.unreleased }">
-										<a
-											v-if="repo.unreleased && repo.release"
-											:href="`${repoUrl(repo.name)}/compare/${repo.release.tag}...${repo.branch}`"
-											>{{ repo.unreleased }}</a
-										>
-										<template v-else>{{ repo.unreleased ?? '—' }}</template>
-									</td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
-					<p v-else class="empty">No repository matches the filter.</p>
-				</template>
-			</section>
 		</template>
 	</div>
 </template>
@@ -772,6 +846,8 @@ code,
 
 section {
 	margin-top: 40px;
+	/* Clear of the fixed navigation bar when jumped to from the summary. */
+	scroll-margin-top: 80px;
 }
 
 h2 {
@@ -793,7 +869,6 @@ h2 {
 	align-items: baseline;
 	justify-content: space-between;
 	gap: 4px 16px;
-	margin-bottom: 12px;
 }
 
 /* Snapshot and notices --------------------------------------------------- */
@@ -834,6 +909,12 @@ h2 {
 	margin-top: 20px;
 }
 
+.strip-title {
+	margin: 0 0 6px;
+	color: var(--vp-c-text-2);
+	font-size: 13px;
+}
+
 .strip {
 	display: flex;
 	gap: 2px;
@@ -850,7 +931,7 @@ h2 {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 4px 24px;
-	margin: 10px 0 0;
+	margin: 6px 0 0;
 	padding: 0;
 	list-style: none;
 
@@ -1207,12 +1288,23 @@ details {
 	}
 }
 
+.packages-head,
 summary {
 	display: grid;
 	grid-template-columns: 1.3em minmax(220px, 2fr) 70px minmax(100px, 1fr) minmax(180px, 3fr);
 	gap: 2px 12px;
 	align-items: baseline;
 	padding: 7px 0;
+}
+
+.packages-head {
+	border-bottom: 1px solid var(--vp-c-divider);
+	color: var(--vp-c-text-2);
+	font-size: 13px;
+	font-weight: 500;
+}
+
+summary {
 	cursor: pointer;
 
 	&:hover .name {
@@ -1277,6 +1369,11 @@ summary {
 }
 
 @media (max-width: 720px) {
+	/* The columns stack here, so there is nothing for these headings to name. */
+	.packages-head {
+		display: none;
+	}
+
 	summary {
 		grid-template-columns: 1.3em minmax(0, 1fr) auto;
 	}
