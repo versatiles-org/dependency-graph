@@ -3,6 +3,7 @@ import { buildNameMaps, classify, type RepoFile } from './collect';
 import {
 	assess,
 	assessDeployment,
+	buildDriftReport,
 	cargoRequirements,
 	collectDeployments,
 	collectDrift,
@@ -357,6 +358,128 @@ describe('collectDrift', () => {
 		expect(report).not.toContain('npm update');
 		expect(report).toContain('frontend  2 outdated');
 		expect(report).toMatch(/2 packages, 2 usages: 1 range excludes latest, 1 stale-lock$/);
+	});
+});
+
+describe('buildDriftReport', () => {
+	const style = release('6.0.3');
+	const core = usage({ name: '@versatiles/core', provider: 'versatiles-core' });
+	const result = {
+		findings: [
+			assess(usage({ consumer: 'a', installed: '6.0.3' }), style),
+			assess(usage({ consumer: 'b', requested: '^5.0.0', installed: '5.0.0' }), style),
+			assess(usage({ consumer: 'c', path: 'web/package.json' }), style),
+			assess(usage({ consumer: 'c', installed: null, requested: '^5.0.0' }), style),
+			assess({ ...core, consumer: 'versatiles-style' }, release('6.1.0')),
+		],
+		releases: new Map([
+			['npm:@versatiles/style', style],
+			['npm:@versatiles/core', release('6.1.0')],
+		]),
+	};
+
+	it('sorts packages by name, and each usage worst first', () => {
+		const { packages } = buildDriftReport(result);
+		expect(packages.map((entry) => entry.name)).toEqual([
+			'@versatiles/core',
+			'@versatiles/style',
+		]);
+		expect(packages[1].usages.map((entry) => `${entry.consumer} ${entry.status}`)).toEqual([
+			'b range',
+			'c range',
+			'c stale-lock',
+			'a current',
+		]);
+		expect(packages[1]).toMatchObject({ provider: 'versatiles-style', release: style });
+	});
+
+	it('counts the versions in use, newest first, and names what is not locked', () => {
+		expect(buildDriftReport(result).packages[1].spread).toEqual([
+			{ version: '^5.0.0 (unlocked)', count: 1 },
+			{ version: '6.0.3', count: 1 },
+			{ version: '6.0.1', count: 1 },
+			{ version: '5.0.0', count: 1 },
+		]);
+	});
+
+	it('lists only repositories with something to update, in the order to update them', () => {
+		const { dependents } = buildDriftReport(result);
+		// b and c use @versatiles/style, so they wait until versatiles-style has been updated.
+		expect(dependents.map((entry) => entry.consumer)).toEqual(['versatiles-style', 'b', 'c']);
+		expect(dependents.find((entry) => entry.consumer === 'b')?.outdated[0]).toMatchObject({
+			name: '@versatiles/style',
+			installed: '5.0.0',
+			latest: '6.0.3',
+		});
+	});
+
+	it('lets the rank decide between repositories that are independent', () => {
+		const { dependents } = buildDriftReport(result, (repo) => (repo === 'c' ? 0 : 1));
+		expect(dependents.map((entry) => entry.consumer)).toEqual(['versatiles-style', 'c', 'b']);
+	});
+
+	it('says that the latest release is unknown instead of leaving the usage out', () => {
+		const { dependents } = buildDriftReport({
+			findings: [
+				assess(
+					usage({ consumer: 'a', requested: '^1.0.0', installed: '1.0.0' }),
+					release('2.0.0'),
+				),
+			],
+			releases: new Map(),
+		});
+		expect(dependents[0].outdated[0].latest).toBeNull();
+	});
+
+	it('counts every status, and the components of a deployment that are behind', () => {
+		const deployment = {
+			repo: 'site',
+			url: 'https://example.org',
+			components: { a: 'x', b: 'y' },
+		};
+		const { totals, deployments } = buildDriftReport({
+			...result,
+			deployments: [
+				assessDeployment(
+					deployment,
+					{ a: '1.0.0', b: '2.0.0' },
+					new Map([
+						['x', release('1.1.0')],
+						['y', release('2.0.0')],
+					]),
+				),
+			],
+		});
+		expect(totals).toEqual({
+			usages: 5,
+			byStatus: { range: 2, 'stale-lock': 2, unknown: 0, ahead: 0, current: 1 },
+			deploymentsBehind: 1,
+		});
+		expect(deployments).toHaveLength(1);
+	});
+
+	it('has no deployments when none were collected', () => {
+		expect(buildDriftReport(result).deployments).toEqual([]);
+	});
+
+	it('leaves the findings it was given in their original order', () => {
+		const before = result.findings.map((finding) => finding.consumer);
+		buildDriftReport(result);
+		expect(result.findings.map((finding) => finding.consumer)).toEqual(before);
+	});
+
+	it('survives being written to JSON, which a Map would not', () => {
+		const report = buildDriftReport({
+			...result,
+			deployments: [
+				assessDeployment(
+					{ repo: 'site', url: 'https://example.org', components: { a: 'x' } },
+					{ a: '1.0.0' },
+					new Map([['x', release('1.1.0')]]),
+				),
+			],
+		});
+		expect(JSON.parse(JSON.stringify(report))).toEqual(report);
 	});
 });
 

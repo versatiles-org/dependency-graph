@@ -731,15 +731,136 @@ export function updateOrder(
 	return order;
 }
 
-export function renderDrift(result: DriftResult, options: ReportOptions): string {
-	const paint = (format: Parameters<typeof styleText>[0], text: string): string =>
-		options.color ? styleText(format, text, { validateStream: false }) : text;
+/** One organisation package, and everywhere it is used. */
+export interface PackageReport {
+	ecosystem: Ecosystem;
+	name: string;
+	/** Repository that publishes the package. */
+	provider: string;
+	release: Release | null;
+	/** The versions in use and how often, newest first. */
+	spread: { version: string; count: number }[];
+	/** Every place it is used, worst first. */
+	usages: Finding[];
+}
 
+/** A usage that has fallen behind, with the version it should move to. */
+export interface OutdatedUsage extends Finding {
+	latest: string | null;
+}
+
+/** One repository, and what it has to update. */
+export interface DependentReport {
+	consumer: string;
+	/** Worst first. */
+	outdated: OutdatedUsage[];
+}
+
+/**
+ * The drift result, sorted and counted but not yet worded. Terminal and web page
+ * both draw from this, so they cannot disagree. It holds nothing but plain data,
+ * which means it survives being written to JSON.
+ */
+export interface DriftReport {
+	packages: PackageReport[];
+	/** Only repositories with something to update, in the order to update them. */
+	dependents: DependentReport[];
+	deployments: DeploymentReport[];
+	totals: {
+		usages: number;
+		byStatus: Record<Status, number>;
+		/** Components of a deployment that run an older release than the latest. */
+		deploymentsBehind: number;
+	};
+}
+
+export function buildDriftReport(
+	result: DriftResult,
+	rank?: (repo: string) => number,
+): DriftReport {
 	const groups = new Map<string, Finding[]>();
 	for (const finding of result.findings) {
 		const key = releaseKey(finding);
 		groups.set(key, [...(groups.get(key) ?? []), finding]);
 	}
+
+	const packages = [...groups.keys()].sort().map((key): PackageReport => {
+		const findings = groups.get(key)!;
+		const spread = new Map<string, number>();
+		for (const finding of findings) {
+			const version = finding.installed ?? `${finding.requested} (unlocked)`;
+			spread.set(version, (spread.get(version) ?? 0) + 1);
+		}
+		return {
+			ecosystem: findings[0].ecosystem,
+			name: findings[0].name,
+			provider: findings[0].provider,
+			release: result.releases.get(key) ?? null,
+			spread: [...spread]
+				.sort(([a], [b]) =>
+					semver.valid(a) && semver.valid(b) ? semver.rcompare(a, b) : a.localeCompare(b),
+				)
+				.map(([version, count]) => ({ version, count })),
+			usages: [...findings].sort(
+				(a, b) =>
+					STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) ||
+					a.consumer.localeCompare(b.consumer) ||
+					a.path.localeCompare(b.path),
+			),
+		};
+	});
+
+	// The same findings the other way around: what each repository has to update.
+	const outdated = new Map<string, Finding[]>();
+	for (const finding of result.findings) {
+		if (!OUTDATED.includes(finding.status)) continue;
+		outdated.set(finding.consumer, [...(outdated.get(finding.consumer) ?? []), finding]);
+	}
+	const dependents = updateOrder([...outdated.keys()], result.findings, rank).map(
+		(consumer): DependentReport => ({
+			consumer,
+			outdated: [...outdated.get(consumer)!]
+				.sort(
+					(a, b) =>
+						STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) ||
+						a.name.localeCompare(b.name) ||
+						a.path.localeCompare(b.path),
+				)
+				.map((finding) => ({
+					...finding,
+					latest: result.releases.get(releaseKey(finding))?.version ?? null,
+				})),
+		}),
+	);
+
+	const byStatus: Record<Status, number> = {
+		range: 0,
+		'stale-lock': 0,
+		unknown: 0,
+		ahead: 0,
+		current: 0,
+	};
+	for (const finding of result.findings) byStatus[finding.status]++;
+
+	const deployments = result.deployments ?? [];
+	return {
+		packages,
+		dependents,
+		deployments,
+		totals: {
+			usages: result.findings.length,
+			byStatus,
+			deploymentsBehind: deployments.flatMap((deployment) =>
+				deployment.findings.filter((finding) => finding.status === 'behind'),
+			).length,
+		},
+	};
+}
+
+export function renderDrift(result: DriftResult, options: ReportOptions): string {
+	const report = buildDriftReport(result, options.rank);
+	const paint = (format: Parameters<typeof styleText>[0], text: string): string =>
+		options.color ? styleText(format, text, { validateStream: false }) : text;
 
 	const note = (finding: Finding): string =>
 		[finding.behind ? `${finding.behind} behind` : '', finding.note].filter(Boolean).join(', ');
@@ -747,41 +868,22 @@ export function renderDrift(result: DriftResult, options: ReportOptions): string
 		finding.path === 'package.json' || finding.path === 'Cargo.toml';
 
 	const lines: string[] = [];
-	const totals = new Map<Status, number>();
 
-	for (const key of [...groups.keys()].sort()) {
-		const findings = groups.get(key)!;
-		for (const finding of findings)
-			totals.set(finding.status, (totals.get(finding.status) ?? 0) + 1);
-		if (options.onlyOutdated && findings.every((finding) => finding.status === 'current'))
-			continue;
+	for (const { ecosystem, name, provider, release, spread, usages: rows } of report.packages) {
+		if (options.onlyOutdated && rows.every((finding) => finding.status === 'current')) continue;
 
-		const first = findings[0];
-		const release = result.releases.get(key) ?? null;
-		const header = [paint('bold', first.name), paint('bold', release?.version ?? '?')];
-		const facts = [first.ecosystem, `from ${first.provider}`];
+		const header = [paint('bold', name), paint('bold', release?.version ?? '?')];
+		const facts = [ecosystem, `from ${provider}`];
 		if (release?.source === 'manifest') facts.push('not published, version on main');
 		if (release?.date)
 			facts.push(`released ${release.date.slice(0, 10)} (${age(release.date, options.now)})`);
 		lines.push(`${header.join(' ')}  ${paint('dim', facts.join(' · '))}`);
 
 		// "6.0.3 ×9 · 6.0.1 ×2": the spread at a glance, newest first.
-		const spread = new Map<string, number>();
-		for (const finding of findings) {
-			const version = finding.installed ?? `${finding.requested} (unlocked)`;
-			spread.set(version, (spread.get(version) ?? 0) + 1);
-		}
-		const ordered = [...spread].sort(([a], [b]) =>
-			semver.valid(a) && semver.valid(b) ? semver.rcompare(a, b) : a.localeCompare(b),
+		lines.push(
+			`  ${paint('dim', spread.map(({ version, count }) => `${version} ×${count}`).join(' · '))}`,
 		);
-		lines.push(`  ${paint('dim', ordered.map(([v, n]) => `${v} ×${n}`).join(' · '))}`);
 
-		const rows = [...findings].sort(
-			(a, b) =>
-				STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) ||
-				a.consumer.localeCompare(b.consumer) ||
-				a.path.localeCompare(b.path),
-		);
 		const where = (finding: Finding): string =>
 			isRoot(finding) ? finding.consumer : `${finding.consumer}/${dirname(finding.path)}`;
 		const whereWidth = Math.max(...rows.map((row) => [...where(row)].length));
@@ -804,34 +906,20 @@ export function renderDrift(result: DriftResult, options: ReportOptions): string
 	}
 	if (lines.length > 0) lines.unshift(paint('underline', 'Packages and their dependents'), '');
 
-	// The same findings the other way around: what each repository has to update.
-	const dependents = new Map<string, Finding[]>();
-	for (const finding of result.findings) {
-		if (!OUTDATED.includes(finding.status)) continue;
-		dependents.set(finding.consumer, [...(dependents.get(finding.consumer) ?? []), finding]);
-	}
-	if (dependents.size > 0)
+	if (report.dependents.length > 0)
 		lines.push(
 			paint('underline', 'Dependents and their outdated packages'),
 			paint('dim', 'in the order to update them: each one after the repositories it builds on'),
 			'',
 		);
 
-	for (const consumer of updateOrder([...dependents.keys()], result.findings, options.rank)) {
-		const rows = dependents
-			.get(consumer)!
-			.sort(
-				(a, b) =>
-					STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) ||
-					a.name.localeCompare(b.name) ||
-					a.path.localeCompare(b.path),
-			);
+	for (const { consumer, outdated: rows } of report.dependents) {
 		lines.push(`${paint('bold', consumer)}  ${paint('dim', `${rows.length} outdated`)}`);
 
 		const what = (finding: Finding): string =>
 			isRoot(finding) ? finding.name : `${finding.name} in ${dirname(finding.path)}`;
-		const versions = (finding: Finding): string =>
-			`${finding.installed ?? '—'} → ${result.releases.get(releaseKey(finding))?.version ?? '?'}`;
+		const versions = (finding: OutdatedUsage): string =>
+			`${finding.installed ?? '—'} → ${finding.latest ?? '?'}`;
 		const whatWidth = Math.max(...rows.map((row) => [...what(row)].length));
 		const versionsWidth = Math.max(...rows.map((row) => [...versions(row)].length));
 		const requestedWidth = Math.max(...rows.map((row) => row.requested.length));
@@ -852,8 +940,7 @@ export function renderDrift(result: DriftResult, options: ReportOptions): string
 	}
 
 	// Deployments last: they can only catch up once everything above is released.
-	const deployments = result.deployments ?? [];
-	const shownDeployments = deployments.filter(
+	const shownDeployments = report.deployments.filter(
 		(deployment) =>
 			!options.onlyOutdated ||
 			!deployment.reachable ||
@@ -907,15 +994,13 @@ export function renderDrift(result: DriftResult, options: ReportOptions): string
 		lines.push('');
 	}
 
-	const summary = STATUS_ORDER.filter((status) => totals.get(status)).map(
-		(status) => `${totals.get(status)} ${status === 'range' ? 'range excludes latest' : status}`,
+	const { usages, byStatus, deploymentsBehind } = report.totals;
+	const summary = STATUS_ORDER.filter((status) => byStatus[status]).map(
+		(status) => `${byStatus[status]} ${status === 'range' ? 'range excludes latest' : status}`,
 	);
-	const redeploy = deployments.flatMap((deployment) =>
-		deployment.findings.filter((finding) => finding.status === 'behind'),
-	).length;
-	if (redeploy > 0) summary.push(`${redeploy} deployed behind`);
+	if (deploymentsBehind > 0) summary.push(`${deploymentsBehind} deployed behind`);
 	lines.push(
-		`${groups.size} packages, ${result.findings.length} usages` +
+		`${report.packages.length} packages, ${usages} usages` +
 			(summary.length ? `: ${summary.join(', ')}` : ''),
 	);
 	return lines.join('\n');
