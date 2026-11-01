@@ -350,7 +350,7 @@
 			"from": "download.versatiles.org",
 			"to": "node-versatiles-container",
 			"kind": "npm",
-			"detail": "@versatiles/container@^2.0.2",
+			"detail": "@versatiles/container@^2.1.0",
 			"path": "package.json",
 			"line": 46
 		},
@@ -397,14 +397,6 @@
 		{
 			"from": "landcover-vectors",
 			"to": "versatiles-rs",
-			"kind": "download",
-			"detail": "github.com/versatiles-org/versatiles-rs/blob",
-			"path": "lib/tools.ts",
-			"line": 24
-		},
-		{
-			"from": "landcover-vectors",
-			"to": "versatiles-rs",
 			"kind": "manual",
 			"detail": "runs the versatiles CLI to assemble and merge the landcover tiles",
 			"path": "",
@@ -414,7 +406,7 @@
 			"from": "landcover-vectors",
 			"to": "versatiles-rs",
 			"kind": "npm",
-			"detail": "@versatiles/versatiles-rs@^5.4.0",
+			"detail": "@versatiles/versatiles-rs@^5.6.0",
 			"path": "package.json",
 			"line": 35
 		},
@@ -422,7 +414,7 @@
 			"from": "landcover-vectors",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^7.0.1",
+			"detail": "@versatiles/style@^7.1.0",
 			"path": "package.json",
 			"line": 34
 		},

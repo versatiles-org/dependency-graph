@@ -123,10 +123,10 @@ The repository lists a `@versatiles/…` package among its npm dependencies.
 | From                         | To                         | Found                                    | Source                                                                                                    |
 | ---------------------------- | -------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | download.versatiles.org      | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/download.versatiles.org/blob/main/package.json#L60)      |
-| download.versatiles.org      | node-versatiles-container  | `@versatiles/container@^2.0.2`           | [package.json](https://github.com/versatiles-org/download.versatiles.org/blob/main/package.json#L46)      |
+| download.versatiles.org      | node-versatiles-container  | `@versatiles/container@^2.1.0`           | [package.json](https://github.com/versatiles-org/download.versatiles.org/blob/main/package.json#L46)      |
 | download.versatiles.org      | node-versatiles-svelte     | `@versatiles/svelte@^3.0.1`              | [package.json](https://github.com/versatiles-org/download.versatiles.org/blob/main/package.json#L47)      |
-| landcover-vectors            | versatiles-rs              | `@versatiles/versatiles-rs@^5.4.0`       | [package.json](https://github.com/versatiles-org/landcover-vectors/blob/main/package.json#L35)            |
-| landcover-vectors            | versatiles-style           | `@versatiles/style@^7.0.1`               | [package.json](https://github.com/versatiles-org/landcover-vectors/blob/main/package.json#L34)            |
+| landcover-vectors            | versatiles-rs              | `@versatiles/versatiles-rs@^5.6.0`       | [package.json](https://github.com/versatiles-org/landcover-vectors/blob/main/package.json#L35)            |
+| landcover-vectors            | versatiles-style           | `@versatiles/style@^7.1.0`               | [package.json](https://github.com/versatiles-org/landcover-vectors/blob/main/package.json#L34)            |
 | maplibre-versatiles-styler   | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/maplibre-versatiles-styler/blob/main/package.json#L54)   |
 | maplibre-versatiles-styler   | versatiles-style           | `@versatiles/style@^7.1.0`               | [package.json](https://github.com/versatiles-org/maplibre-versatiles-styler/blob/main/package.json#L55)   |
 | node-versatiles-container    | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/node-versatiles-container/blob/main/package.json#L68)    |
@@ -197,14 +197,13 @@ A `Dockerfile` builds on an image produced by another repository.
 
 Build scripts or runtime code fetch release assets or raw files from another repository.
 
-::: details Where these 28 links come from
+::: details Where these 27 links come from
 
 | From                     | To                   | Found                                                    | Source                                                                                                                                                     |
 | ------------------------ | -------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | homebrew-versatiles      | versatiles-glyphs-rs | `"versatiles-org/versatiles-glyphs-rs"`                  | [bin/make_formula_glyphs.sh](https://github.com/versatiles-org/homebrew-versatiles/blob/main/bin/make_formula_glyphs.sh#L14)                               |
 | homebrew-versatiles      | versatiles-rs        | `github.com/versatiles-org/versatiles-rs/releases`       | [bin/make_formula.sh](https://github.com/versatiles-org/homebrew-versatiles/blob/main/bin/make_formula.sh#L6)                                              |
 | homebrew-versatiles      | versatiles-studio    | `"versatiles-org/versatiles-studio"`                     | [bin/make_cask.sh](https://github.com/versatiles-org/homebrew-versatiles/blob/main/bin/make_cask.sh#L21)                                                   |
-| landcover-vectors        | versatiles-rs        | `github.com/versatiles-org/versatiles-rs/blob`           | [lib/tools.ts](https://github.com/versatiles-org/landcover-vectors/blob/main/lib/tools.ts#L24)                                                             |
 | node-versatiles-server   | versatiles-frontend  | `github.com/versatiles-org/versatiles-frontend/releases` | [scripts/update-frontend.sh](https://github.com/versatiles-org/node-versatiles-server/blob/main/scripts/update-frontend.sh#L16)                            |
 | orthophotos              | versatiles-frontend  | `github.com/versatiles-org/versatiles-frontend/releases` | [src/server/frontend.ts](https://github.com/versatiles-org/orthophotos/blob/main/src/server/frontend.ts#L25)                                               |
 | tiles.versatiles.org     | versatiles-frontend  | `github.com/versatiles-org/versatiles-frontend/releases` | [bin/frontend/update.sh](https://github.com/versatiles-org/tiles.versatiles.org/blob/main/bin/frontend/update.sh#L22)                                      |
