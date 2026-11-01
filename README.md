@@ -4,7 +4,7 @@ How the repositories of the [versatiles-org](https://github.com/versatiles-org) 
 
 The site is published at <https://versatiles.org/dependency-graph/>. The full record is available as [`dependency-graph.json`](https://versatiles.org/dependency-graph/dependency-graph.json).
 
-The [status page](https://versatiles.org/dependency-graph/status/) is for people working on VersaTiles. It shows which repositories use an outdated release of the project's own packages, in the order to update them, and whether deployments run the latest releases. Its data is available as [`status.json`](https://versatiles.org/dependency-graph/status.json).
+The [status page](https://versatiles.org/dependency-graph/status/) is for people working on VersaTiles. It shows which repositories use an outdated release of the project's own packages, in the order to update them, whether exact releases pinned in formulas, manifests and image tags have fallen behind, and whether deployments run the latest releases. Its data is available as [`status.json`](https://versatiles.org/dependency-graph/status.json).
 
 ## How it updates
 

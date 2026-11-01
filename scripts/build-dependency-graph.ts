@@ -31,6 +31,7 @@ import { buildNameMaps, classify, collectEdges, type RepoFile } from './dependen
 import {
 	collectDeployments,
 	collectDrift,
+	collectPins,
 	renderDrift,
 	type DriftResult,
 } from './dependency-graph/drift';
@@ -168,6 +169,7 @@ async function main(): Promise<void> {
 		};
 		const result = await collectDrift(files, maps, source, tracked);
 		result.deployments = await collectDeployments(config.deployments, source, tracked);
+		result.pins = await collectPins(config.pins, config.pinnedImages, source, tracked);
 		lookup.finish();
 		return result;
 	};

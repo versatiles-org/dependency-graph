@@ -7,11 +7,15 @@ import {
 	cargoRequirements,
 	collectDeployments,
 	collectDrift,
+	collectPins,
 	findUsages,
+	imageTagsUrl,
 	lockCandidates,
 	lockedVersion,
 	manifestVersions,
+	newestImageTag,
 	parseRegistry,
+	readPin,
 	registryUrl,
 	renderDrift,
 	updateOrder,
@@ -361,6 +365,150 @@ describe('collectDrift', () => {
 	});
 });
 
+describe('pinned releases', () => {
+	const formula = 'class Versatiles < Formula\n  version "5.4.0"\nend\n';
+	const manifest = JSON.stringify({
+		sources: { sprites: { assets: { a: { digest: 'x' } }, repo: 'r', version: 'v7.1.0' } },
+	});
+
+	describe('readPin', () => {
+		it('reads a version from the first group of a pattern', () => {
+			expect(readPin(formula, { pattern: 'version "([^"]+)"' })).toBe('5.4.0');
+			expect(readPin(formula, { pattern: 'nothing "([^"]+)"' })).toBeNull();
+		});
+
+		it('follows a path through JSON', () => {
+			expect(readPin(manifest, { json: 'sources.sprites.version' })).toBe('v7.1.0');
+			expect(readPin(manifest, { json: 'sources.fonts.version' })).toBeNull();
+			expect(readPin(manifest, { json: 'sources.sprites.assets' })).toBeNull();
+			expect(readPin('not json', { json: 'a' })).toBeNull();
+		});
+	});
+
+	describe('newestImageTag', () => {
+		const tags = (...names: unknown[]) => ({ results: names.map((name) => ({ name })) });
+
+		it('takes the highest version, whatever order the tags come in', () => {
+			expect(newestImageTag(tags('v5.4.1', 'v5.10.0', 'v5.5.0'))).toBe('v5.10.0');
+		});
+
+		it('ignores variants and moving tags', () => {
+			expect(newestImageTag(tags('latest', 'scratch', 'v5.9.0-alpine', 'v5.5.0', 3))).toBe(
+				'v5.5.0',
+			);
+		});
+
+		it('has no answer without a version tag', () => {
+			expect(newestImageTag(tags('latest'))).toBeNull();
+			expect(newestImageTag(null)).toBeNull();
+			expect(newestImageTag({})).toBeNull();
+		});
+	});
+
+	describe('collectPins', () => {
+		const pins = [
+			{ repo: 'brew', path: 'old.rb', provider: 'rs', pattern: 'version "([^"]+)"' },
+			{ repo: 'brew', path: 'gone.rb', provider: 'rs', pattern: 'version "([^"]+)"' },
+			{ repo: 'brew', path: 'moved.rb', provider: 'rs', pattern: 'version "([^"]+)"' },
+			{ repo: 'brew', path: 'broken.rb', provider: 'rs', pattern: 'version "([^"]+)"' },
+			{
+				repo: 'studio',
+				path: 'manifest.json',
+				provider: 'style',
+				json: 'sources.sprites.version',
+			},
+		];
+		const images = [
+			{ image: 'org/fresh', repo: 'docker', provider: 'rs' },
+			{ image: 'org/stale', repo: 'docker', provider: 'rs' },
+			{ image: 'org/down', repo: 'docker', provider: 'rs' },
+		];
+		const source: DriftSource = {
+			readFile: (_repo, path) => {
+				if (path === 'old.rb') return Promise.resolve(formula);
+				if (path === 'moved.rb') return Promise.resolve('no version here');
+				if (path === 'broken.rb') return Promise.reject(new Error('502'));
+				if (path === 'manifest.json') return Promise.resolve(manifest);
+				return Promise.resolve(null);
+			},
+			latestRelease: (repo) =>
+				Promise.resolve({
+					version: repo === 'rs' ? 'v5.5.0' : 'v7.1.0',
+					date: null,
+					source: 'release',
+				}),
+			getRegistryJson: (url) => {
+				if (url === imageTagsUrl('org/fresh')) {
+					return Promise.resolve({ results: [{ name: 'v5.5.0' }] });
+				}
+				if (url === imageTagsUrl('org/stale')) {
+					return Promise.resolve({ results: [{ name: 'v5.3.0' }] });
+				}
+				return Promise.reject(new Error('down'));
+			},
+		};
+
+		it('compares every pin, and reports the ones it cannot read', async () => {
+			const found = await collectPins(pins, images, source, mapLimit);
+			expect(
+				found.map((pin) => [
+					pin.path ?? pin.image,
+					pin.pinned,
+					pin.status,
+					pin.behind,
+					pin.note,
+				]),
+			).toEqual([
+				['old.rb', '5.4.0', 'behind', 'minor', 'update the pin'],
+				['gone.rb', null, 'unknown', null, 'file could not be read'],
+				['moved.rb', null, 'unknown', null, 'no version found where the configuration says'],
+				['broken.rb', null, 'unknown', null, 'file could not be read'],
+				['manifest.json', '7.1.0', 'current', null, ''],
+				['org/fresh', '5.5.0', 'current', null, ''],
+				['org/stale', '5.3.0', 'behind', 'minor', 'update the pin'],
+				['org/down', null, 'unknown', null, 'no version tag could be read'],
+			]);
+		});
+
+		it('leaves pins unknown when the latest release cannot be read', async () => {
+			const [pin] = await collectPins(
+				pins.slice(0, 1),
+				[],
+				{ ...source, latestRelease: () => Promise.reject(new Error('502')) },
+				mapLimit,
+			);
+			expect(pin).toMatchObject({
+				pinned: '5.4.0',
+				status: 'unknown',
+				note: 'versions cannot be compared',
+			});
+		});
+
+		it('sorts what is behind first, counts it and prints it', async () => {
+			const found = await collectPins(pins, images, source, mapLimit);
+			const result = { findings: [], releases: new Map(), pins: found };
+			const report = buildDriftReport(result);
+			expect(report.pins.slice(0, 2).map((pin) => pin.status)).toEqual(['behind', 'behind']);
+			expect(report.totals.pinsBehind).toBe(2);
+			expect(report.pins.at(-1)?.status).toBe('current');
+
+			const text = renderDrift(result, {
+				color: false,
+				now: new Date(),
+				onlyOutdated: true,
+			});
+			expect(text).toContain('Pinned releases');
+			expect(text).toMatch(
+				/↑ {2}brew\/old\.rb +5\.4\.0 → 5\.5\.0 {2}rs {2}minor behind, update the pin/,
+			);
+			expect(text).toContain('docker/org/stale');
+			// Current pins stay out of a report of what is outdated.
+			expect(text).not.toContain('org/fresh');
+			expect(text).toMatch(/2 pinned behind$/);
+		});
+	});
+});
+
 describe('collectDrift when a registry fails', () => {
 	it('leaves that package unknown, and the rest of the report intact', async () => {
 		const files = [
@@ -495,6 +643,7 @@ describe('buildDriftReport', () => {
 			usages: 5,
 			byStatus: { range: 2, 'stale-lock': 2, unknown: 0, ahead: 0, current: 1 },
 			deploymentsBehind: 1,
+			pinsBehind: 0,
 		});
 		expect(deployments).toHaveLength(1);
 	});

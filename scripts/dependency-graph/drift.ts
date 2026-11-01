@@ -459,6 +459,7 @@ export interface DriftResult {
 	/** Latest release per `ecosystem:name`. */
 	releases: Map<string, Release | null>;
 	deployments?: DeploymentReport[];
+	pins?: PinFinding[];
 }
 
 /* ------------------------------------------------------------------------ */
@@ -504,6 +505,28 @@ function plain(version: string): string {
 	return semver.clean(version) ?? version;
 }
 
+/** Where one exact version stands against the latest release, and what to say if it is behind. */
+function compareToRelease(
+	version: string,
+	release: Release | null,
+	whenBehind: string,
+): Pick<DeploymentFinding, 'status' | 'behind' | 'note'> {
+	if (!release || !semver.valid(version) || !semver.valid(release.version)) {
+		return { status: 'unknown', behind: null, note: 'versions cannot be compared' };
+	}
+	if (semver.lt(version, release.version)) {
+		return {
+			status: 'behind',
+			behind: distance(version, release.version),
+			note: whenBehind,
+		};
+	}
+	if (semver.gt(version, release.version)) {
+		return { status: 'ahead', behind: null, note: 'newer than the latest release' };
+	}
+	return { status: 'current', behind: null, note: '' };
+}
+
 export function assessDeployment(
 	deployment: Deployment,
 	body: unknown,
@@ -523,19 +546,8 @@ export function assessDeployment(
 		const base = { component, provider, deployed, latest: release, behind: null };
 		if (deployed === null) {
 			findings.push({ ...base, status: 'unknown', note: 'not reported by the deployment' });
-		} else if (!release || !semver.valid(deployed) || !semver.valid(release.version)) {
-			findings.push({ ...base, status: 'unknown', note: 'versions cannot be compared' });
-		} else if (semver.lt(deployed, release.version)) {
-			findings.push({
-				...base,
-				status: 'behind',
-				behind: distance(deployed, release.version),
-				note: 'redeploy',
-			});
-		} else if (semver.gt(deployed, release.version)) {
-			findings.push({ ...base, status: 'ahead', note: 'newer than the latest release' });
 		} else {
-			findings.push({ ...base, status: 'current', note: '' });
+			findings.push({ ...base, ...compareToRelease(deployed, release, 'redeploy') });
 		}
 	}
 
@@ -579,6 +591,126 @@ export async function collectDeployments(
 		const body = await source.getRegistryJson(deployment.url).catch(() => null);
 		return assessDeployment(deployment, body, latest);
 	});
+}
+
+/* ------------------------------------------------------------------------ */
+/* Pinned releases                                                          */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Most references between repositories float: `:latest`, `releases/latest`,
+ * `main`. Those cannot fall behind, so only the few that name an exact release
+ * are worth comparing: a formula, a manifest of assets, a published image tag.
+ * Nothing about them can be recognised reliably, so the configuration lists them.
+ */
+export interface Pin {
+	/** Repository holding the file. */
+	repo: string;
+	path: string;
+	/** Repository whose releases are pinned. */
+	provider: string;
+	/** Regular expression whose first group is the version. */
+	pattern?: string;
+	/** Dotted path to the version, for a JSON file. */
+	json?: string;
+}
+
+/** An image published with the version of another repository's release as its tag. */
+export interface PinnedImage {
+	/** Name on Docker Hub, e.g. `versatiles/versatiles`. */
+	image: string;
+	/** Repository that builds it. */
+	repo: string;
+	/** Repository whose release it packages. */
+	provider: string;
+}
+
+export interface PinFinding {
+	repo: string;
+	/** File holding the version; null for an image. */
+	path: string | null;
+	/** Image whose tags hold the version; null for a file. */
+	image: string | null;
+	provider: string;
+	/** The version named, or null when it could not be read. */
+	pinned: string | null;
+	latest: Release | null;
+	status: DeploymentStatus;
+	behind: Finding['behind'];
+	note: string;
+}
+
+export function readPin(text: string, pin: Pick<Pin, 'pattern' | 'json'>): string | null {
+	if (pin.json !== undefined) {
+		let value: unknown;
+		try {
+			value = JSON.parse(text);
+		} catch {
+			return null;
+		}
+		for (const key of pin.json.split('.')) {
+			value =
+				typeof value === 'object' && value !== null
+					? (value as Record<string, unknown>)[key]
+					: null;
+		}
+		return typeof value === 'string' ? value : null;
+	}
+	return new RegExp(pin.pattern ?? '').exec(text)?.[1] ?? null;
+}
+
+/** The highest plain version among the tags of a Docker Hub listing, or null. */
+export function newestImageTag(body: unknown): string | null {
+	const { results } = (body ?? {}) as { results?: { name?: unknown }[] };
+	const tags = (results ?? []).map((tag) => tag.name);
+	const versions = tags.filter(
+		(name): name is string => typeof name === 'string' && /^v?\d+\.\d+\.\d+$/.test(name),
+	);
+	return versions.sort(semver.rcompare)[0] ?? null;
+}
+
+export const imageTagsUrl = (image: string): string =>
+	`https://hub.docker.com/v2/repositories/${image}/tags?page_size=100`;
+
+export async function collectPins(
+	pins: Pin[],
+	images: PinnedImage[],
+	source: DriftSource,
+	mapLimit: <T, R>(items: readonly T[], worker: (item: T) => Promise<R>) => Promise<R[]>,
+): Promise<PinFinding[]> {
+	const providers = [...new Set([...pins, ...images].map((entry) => entry.provider))];
+	const latest = new Map<string, Release | null>();
+	await mapLimit(providers, async (repo) => {
+		const release = await source.latestRelease(repo).catch(() => null);
+		latest.set(repo, release && { ...release, version: plain(release.version) });
+	});
+
+	/** A pin that cannot be read is reported: otherwise it would stop being watched unnoticed. */
+	const finding = (
+		entry: { repo: string; provider: string; path: string | null; image: string | null },
+		pinned: string | null,
+		unread: string,
+	): PinFinding => {
+		const version = pinned === null ? null : plain(pinned);
+		const release = latest.get(entry.provider) ?? null;
+		const base = { ...entry, pinned: version, latest: release };
+		return version === null
+			? { ...base, status: 'unknown', behind: null, note: unread }
+			: { ...base, ...compareToRelease(version, release, 'update the pin') };
+	};
+
+	const fromFiles = await mapLimit(pins, async (pin) => {
+		const entry = { repo: pin.repo, provider: pin.provider, path: pin.path, image: null };
+		const text = await source.readFile(pin.repo, pin.path).catch(() => null);
+		if (text === null) return finding(entry, null, 'file could not be read');
+		return finding(entry, readPin(text, pin), 'no version found where the configuration says');
+	});
+	const fromImages = await mapLimit(images, async ({ image, repo, provider }) => {
+		const entry = { repo, provider, path: null, image };
+		const body = await source.getRegistryJson(imageTagsUrl(image)).catch(() => null);
+		return finding(entry, newestImageTag(body), 'no version tag could be read');
+	});
+	return [...fromFiles, ...fromImages];
 }
 
 export const releaseKey = (usage: Pick<Usage, 'ecosystem' | 'name'>): string =>
@@ -641,6 +773,8 @@ export async function collectDrift(
 /* ------------------------------------------------------------------------ */
 
 const STATUS_ORDER: Status[] = ['range', 'stale-lock', 'unknown', 'ahead', 'current'];
+
+const PIN_ORDER: DeploymentStatus[] = ['behind', 'unknown', 'ahead', 'current'];
 
 /** The statuses that mean a newer release exists and is not in use. */
 const OUTDATED: Status[] = ['range', 'stale-lock'];
@@ -772,11 +906,14 @@ export interface DriftReport {
 	/** Only repositories with something to update, in the order to update them. */
 	dependents: DependentReport[];
 	deployments: DeploymentReport[];
+	/** Exact releases named in files and image tags; what is behind comes first. */
+	pins: PinFinding[];
 	totals: {
 		usages: number;
 		byStatus: Record<Status, number>;
 		/** Components of a deployment that run an older release than the latest. */
 		deploymentsBehind: number;
+		pinsBehind: number;
 	};
 }
 
@@ -853,16 +990,24 @@ export function buildDriftReport(
 	for (const finding of result.findings) byStatus[finding.status]++;
 
 	const deployments = result.deployments ?? [];
+	const pins = [...(result.pins ?? [])].sort(
+		(a, b) =>
+			PIN_ORDER.indexOf(a.status) - PIN_ORDER.indexOf(b.status) ||
+			a.repo.localeCompare(b.repo) ||
+			(a.path ?? a.image ?? '').localeCompare(b.path ?? b.image ?? ''),
+	);
 	return {
 		packages,
 		dependents,
 		deployments,
+		pins,
 		totals: {
 			usages: result.findings.length,
 			byStatus,
 			deploymentsBehind: deployments.flatMap((deployment) =>
 				deployment.findings.filter((finding) => finding.status === 'behind'),
 			).length,
+			pinsBehind: pins.filter((pin) => pin.status === 'behind').length,
 		},
 	};
 }
@@ -949,6 +1094,31 @@ export function renderDrift(result: DriftResult, options: ReportOptions): string
 		lines.push('');
 	}
 
+	const shownPins = report.pins.filter((pin) => !options.onlyOutdated || pin.status !== 'current');
+	if (shownPins.length > 0) {
+		lines.push(paint('underline', 'Pinned releases'), '');
+		const what = (pin: PinFinding): string => `${pin.repo}/${pin.path ?? pin.image}`;
+		const versions = (pin: PinFinding): string =>
+			pin.status === 'behind' ? `${pin.pinned} → ${pin.latest?.version}` : (pin.pinned ?? '—');
+		const whatWidth = Math.max(...shownPins.map((pin) => [...what(pin)].length));
+		const versionsWidth = Math.max(...shownPins.map((pin) => [...versions(pin)].length));
+		for (const pin of shownPins) {
+			const style = DEPLOYMENT_STYLE[pin.status];
+			const note = [pin.behind ? `${pin.behind} behind` : '', pin.note]
+				.filter(Boolean)
+				.join(', ');
+			const cells = [
+				paint(style.color, style.mark),
+				pad(what(pin), whatWidth),
+				pad(versions(pin), versionsWidth),
+				paint('dim', pin.provider),
+				note ? paint(style.color, note) : '',
+			];
+			lines.push(`  ${cells.join('  ')}`.trimEnd());
+		}
+		lines.push('');
+	}
+
 	// Deployments last: they can only catch up once everything above is released.
 	const shownDeployments = report.deployments.filter(
 		(deployment) =>
@@ -1006,10 +1176,11 @@ export function renderDrift(result: DriftResult, options: ReportOptions): string
 
 	const counted = (count: number, noun: string): string =>
 		`${count} ${noun}${count === 1 ? '' : 's'}`;
-	const { usages, byStatus, deploymentsBehind } = report.totals;
+	const { usages, byStatus, deploymentsBehind, pinsBehind } = report.totals;
 	const summary = STATUS_ORDER.filter((status) => byStatus[status]).map(
 		(status) => `${byStatus[status]} ${status === 'range' ? 'range excludes latest' : status}`,
 	);
+	if (pinsBehind > 0) summary.push(`${pinsBehind} pinned behind`);
 	if (deploymentsBehind > 0) summary.push(`${deploymentsBehind} deployed behind`);
 	lines.push(
 		`${counted(report.packages.length, 'package')}, ${counted(usages, 'usage')}` +

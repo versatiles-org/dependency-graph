@@ -82,6 +82,47 @@ describe('loadConfig', () => {
 	});
 });
 
+describe('pins in the configuration', () => {
+	const pin = (fields: string): string =>
+		`${MINIMAL}pins:\n  - { repo: a, path: b, provider: c, ${fields} }\n`;
+
+	it('reads a pattern or a json path, and images', () => {
+		const config = load(
+			`${pin(`pattern: 'v([0-9.]+)'`)}pinned_images:\n  - { image: x/y, repo: a, provider: c }\n`,
+		);
+		expect(config.pins).toEqual([{ repo: 'a', path: 'b', provider: 'c', pattern: 'v([0-9.]+)' }]);
+		expect(config.pinnedImages).toEqual([{ image: 'x/y', repo: 'a', provider: 'c' }]);
+		expect(load(pin('json: x.y')).pins[0].json).toBe('x.y');
+	});
+
+	it('has none unless told', () => {
+		expect(load(MINIMAL)).toMatchObject({ pins: [], pinnedImages: [] });
+	});
+
+	it('wants exactly one way of finding the version', () => {
+		expect(() => load(pin(`pattern: '(x)', json: y`))).toThrow(/either a pattern or a json/);
+		expect(() => load(`${MINIMAL}pins:\n  - { repo: a, path: b, provider: c }\n`)).toThrow(
+			/either a pattern or a json/,
+		);
+	});
+
+	it('refuses a pattern that could never yield a version', () => {
+		expect(() => load(pin(`pattern: 'version'`))).toThrow(/group around the version/);
+		expect(() => load(pin(`pattern: '('`))).toThrow(/not a valid regular expression/);
+	});
+
+	it('reports a repository that no longer exists', () => {
+		const config = load(
+			`${pin(`json: x`)}pinned_images:\n  - { image: x/y, repo: gone, provider: versatiles-rs }\n`,
+		);
+		const known = new Set(['versatiles-rs', 'a']);
+		expect(validateConfig(config, known)).toEqual([
+			'pins: unknown repository "c"',
+			'pins: unknown repository "gone"',
+		]);
+	});
+});
+
 describe('validateConfig', () => {
 	const known = new Set(['versatiles-rs', 'versatiles-docker']);
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { data } from '../../../status.data';
-import type { Status } from '../../../scripts/dependency-graph/drift';
+import type { PinFinding, Status } from '../../../scripts/dependency-graph/drift';
 import {
 	daysAgo,
 	filterDrift,
@@ -21,6 +21,14 @@ const STATUS: Record<Status, { mark: string; label: string; count: string }> = {
 	current: { mark: '✓', label: 'Current', count: 'current' },
 };
 const ORDER = Object.keys(STATUS) as Status[];
+
+/** A pin has no range to change, so behind is drawn like a stale lockfile, as in the terminal. */
+const PIN_STATUS: Record<PinFinding['status'], { mark: string; tone: Status }> = {
+	behind: { mark: '↑', tone: 'stale-lock' },
+	unknown: { mark: '?', tone: 'unknown' },
+	ahead: { mark: '»', tone: 'ahead' },
+	current: { mark: '✓', tone: 'current' },
+};
 
 const report = data?.drift.status === 'ok' ? data.drift.data : null;
 const driftError = data?.drift.status === 'failed' ? data.drift.error : null;
@@ -131,6 +139,10 @@ const copyLabel = (key: string): string =>
 									? STATUS[status].label.toLowerCase()
 									: STATUS[status].count
 							}}
+						</li>
+						<li>
+							<strong>{{ report.totals.pinsBehind }}</strong>
+							pinned behind
 						</li>
 						<li>
 							<strong>{{ report.totals.deploymentsBehind }}</strong>
@@ -321,6 +333,62 @@ const copyLabel = (key: string): string =>
 								: 'Every package is current everywhere it is used.'
 						}}
 					</p>
+				</section>
+
+				<section v-if="report.pins.length > 0">
+					<h2>Pinned releases</h2>
+					<p class="hint">
+						Exact releases named in a file or an image tag. References to the latest release
+						are not listed, because they cannot fall behind.
+					</p>
+					<div class="scroll" tabindex="0">
+						<table>
+							<thead>
+								<tr>
+									<th scope="col">Repository</th>
+									<th scope="col">Pinned in</th>
+									<th scope="col">Pinned</th>
+									<th scope="col">Latest</th>
+									<th scope="col">From</th>
+									<th scope="col">State</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr
+									v-for="pin in report.pins"
+									:key="`${pin.repo} ${pin.path ?? pin.image} ${pin.provider}`"
+								>
+									<td class="nowrap">
+										<a :href="repoUrl(pin.repo)">{{ pin.repo }}</a>
+									</td>
+									<td class="nowrap">
+										<a v-if="pin.path" :href="fileUrl(pin.repo, pin.path)">{{
+											pin.path
+										}}</a>
+										<a v-else :href="`https://hub.docker.com/r/${pin.image}`">{{
+											pin.image
+										}}</a>
+									</td>
+									<td class="mono nowrap">{{ pin.pinned ?? '—' }}</td>
+									<td class="mono nowrap">{{ pin.latest?.version ?? '—' }}</td>
+									<td class="nowrap">
+										<a :href="repoUrl(pin.provider)">{{ pin.provider }}</a>
+									</td>
+									<td>
+										<span
+											class="mark"
+											:class="`is-${PIN_STATUS[pin.status].tone}`"
+											aria-hidden="true"
+										>
+											{{ PIN_STATUS[pin.status].mark }}
+										</span>
+										{{ pin.status === 'current' ? 'Current' : pin.note }}
+										<template v-if="pin.behind">({{ pin.behind }} behind)</template>
+									</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
 				</section>
 
 				<section v-if="report.deployments.length > 0">

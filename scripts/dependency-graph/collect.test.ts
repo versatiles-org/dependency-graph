@@ -17,6 +17,8 @@ function configure(overrides: Partial<GraphConfig> = {}): GraphConfig {
 		tags: [{ id: 'library', title: 'Libraries', summary: 'Code to build on.' }],
 		repositories: {},
 		deployments: [],
+		pins: [],
+		pinnedImages: [],
 		updateOrder: ['library'],
 		images: {},
 		exclude: [],

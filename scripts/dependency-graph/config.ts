@@ -7,7 +7,7 @@
  */
 
 import { readFileSync } from 'fs';
-import type { Deployment } from './drift';
+import type { Deployment, Pin, PinnedImage } from './drift';
 import { resolve } from 'path';
 import { load as loadYaml } from 'js-yaml';
 import { EDGE_KINDS, type EdgeKind, type TagInfo } from './model';
@@ -37,6 +37,10 @@ export interface GraphConfig {
 	repositories: Record<string, string[]>;
 	/** Services that publish which releases they run, for the drift report. */
 	deployments: Deployment[];
+	/** Files that name an exact release of another repository, for the drift report. */
+	pins: Pin[];
+	/** Images tagged with the release of another repository, for the drift report. */
+	pinnedImages: PinnedImage[];
 	/** Tag ids in the order their repositories should be updated; see the drift report. */
 	updateOrder: string[];
 	/** Docker image name (without tag) to the repository that builds it. */
@@ -127,6 +131,42 @@ export function loadConfig(root: string): GraphConfig {
 		};
 	});
 
+	const pins = ((doc.pins as unknown[] | undefined) ?? []).map((entry, index): Pin => {
+		const where = `pins[${index}]`;
+		const pin = entry as Record<string, unknown>;
+		if ((pin.pattern === undefined) === (pin.json === undefined)) {
+			fail(`${where} needs either a pattern or a json path, and not both`);
+		}
+		const base = {
+			repo: asString(pin.repo, `${where}.repo`),
+			path: asString(pin.path, `${where}.path`),
+			provider: asString(pin.provider, `${where}.provider`),
+		};
+		if (pin.json !== undefined) return { ...base, json: asString(pin.json, `${where}.json`) };
+		const pattern = asString(pin.pattern, `${where}.pattern`);
+		// One group is what the code reads the version from; a mistake should show here, not at runtime.
+		let groups: number;
+		try {
+			groups = new RegExp(`${pattern}|`).exec('')!.length - 1;
+		} catch {
+			fail(`${where}.pattern is not a valid regular expression`);
+		}
+		if (groups < 1) fail(`${where}.pattern needs a group around the version`);
+		return { ...base, pattern };
+	});
+
+	const pinnedImages = ((doc.pinned_images as unknown[] | undefined) ?? []).map(
+		(entry, index): PinnedImage => {
+			const where = `pinned_images[${index}]`;
+			const image = entry as Record<string, unknown>;
+			return {
+				image: asString(image.image, `${where}.image`),
+				repo: asString(image.repo, `${where}.repo`),
+				provider: asString(image.provider, `${where}.provider`),
+			};
+		},
+	);
+
 	const manual = (doc.manual as unknown[] | undefined) ?? [];
 	const ignore = (doc.ignore as unknown[] | undefined) ?? [];
 
@@ -137,6 +177,8 @@ export function loadConfig(root: string): GraphConfig {
 		tags,
 		repositories,
 		deployments,
+		pins,
+		pinnedImages,
 		updateOrder,
 		images: (doc.images as Record<string, string> | undefined) ?? {},
 		exclude: (doc.exclude as string[] | undefined) ?? [],
@@ -187,6 +229,11 @@ export function validateConfig(config: GraphConfig, knownRepos: Set<string>): st
 	for (const deployment of config.deployments) {
 		checkRepo(deployment.repo, 'deployments');
 		for (const repo of Object.values(deployment.components)) checkRepo(repo, 'deployments');
+	}
+
+	for (const pin of [...config.pins, ...config.pinnedImages]) {
+		checkRepo(pin.repo, 'pins');
+		checkRepo(pin.provider, 'pins');
 	}
 
 	for (const repo of config.exclude) checkRepo(repo, 'exclude');
