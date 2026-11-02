@@ -156,7 +156,7 @@ The repository lists a `@versatiles/…` package among its npm dependencies.
 | versatiles-org.github.io     | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/versatiles-org.github.io/blob/main/package.json#L26)     |
 | versatiles-studio            | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/versatiles-studio/blob/main/package.json#L57)            |
 | versatiles-studio            | versatiles-style           | `@versatiles/style@^7.1.0`               | [package.json](https://github.com/versatiles-org/versatiles-studio/blob/main/package.json#L88)            |
-| versatiles-style             | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/versatiles-style/blob/main/package.json#L112)            |
+| versatiles-style             | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/versatiles-style/blob/main/package.json#L113)            |
 | versatiles-svg-renderer      | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/versatiles-svg-renderer/blob/main/package.json#L60)      |
 | versatiles-svg-renderer      | versatiles-style           | `@versatiles/style@^7.0.1`               | [package.json](https://github.com/versatiles-org/versatiles-svg-renderer/blob/main/package.json#L61)      |
 
