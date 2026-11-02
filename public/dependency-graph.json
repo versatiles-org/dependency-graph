@@ -550,7 +550,7 @@
 			"from": "orthophotos",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^7.0.1",
+			"detail": "@versatiles/style@^7.1.0",
 			"path": "package.json",
 			"line": 38
 		},
