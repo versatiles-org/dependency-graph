@@ -127,8 +127,8 @@ The repository lists a `@versatiles/…` package among its npm dependencies.
 | download.versatiles.org      | node-versatiles-svelte     | `@versatiles/svelte@^3.0.1`              | [package.json](https://github.com/versatiles-org/download.versatiles.org/blob/main/package.json#L47)      |
 | landcover-vectors            | versatiles-rs              | `@versatiles/versatiles-rs@^5.6.0`       | [package.json](https://github.com/versatiles-org/landcover-vectors/blob/main/package.json#L35)            |
 | landcover-vectors            | versatiles-style           | `@versatiles/style@^7.1.0`               | [package.json](https://github.com/versatiles-org/landcover-vectors/blob/main/package.json#L34)            |
-| maplibre-versatiles-styler   | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/maplibre-versatiles-styler/blob/main/package.json#L54)   |
-| maplibre-versatiles-styler   | versatiles-style           | `@versatiles/style@^7.1.0`               | [package.json](https://github.com/versatiles-org/maplibre-versatiles-styler/blob/main/package.json#L55)   |
+| maplibre-versatiles-styler   | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/maplibre-versatiles-styler/blob/main/package.json#L54)   |
+| maplibre-versatiles-styler   | versatiles-style           | `@versatiles/style@^8.1.1`               | [package.json](https://github.com/versatiles-org/maplibre-versatiles-styler/blob/main/package.json#L55)   |
 | node-versatiles-container    | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/node-versatiles-container/blob/main/package.json#L68)    |
 | node-versatiles-google-cloud | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/node-versatiles-google-cloud/blob/main/package.json#L77) |
 | node-versatiles-google-cloud | node-versatiles-container  | `@versatiles/container@^2.1.0`           | [package.json](https://github.com/versatiles-org/node-versatiles-google-cloud/blob/main/package.json#L63) |
@@ -156,7 +156,7 @@ The repository lists a `@versatiles/…` package among its npm dependencies.
 | versatiles-org.github.io     | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/versatiles-org.github.io/blob/main/package.json#L26)     |
 | versatiles-studio            | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/versatiles-studio/blob/main/package.json#L57)            |
 | versatiles-studio            | versatiles-style           | `@versatiles/style@^7.1.0`               | [package.json](https://github.com/versatiles-org/versatiles-studio/blob/main/package.json#L88)            |
-| versatiles-style             | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/versatiles-style/blob/main/package.json#L113)            |
+| versatiles-style             | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/versatiles-style/blob/main/package.json#L113)            |
 | versatiles-svg-renderer      | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/versatiles-svg-renderer/blob/main/package.json#L60)      |
 | versatiles-svg-renderer      | versatiles-style           | `@versatiles/style@^7.0.1`               | [package.json](https://github.com/versatiles-org/versatiles-svg-renderer/blob/main/package.json#L61)      |
 
