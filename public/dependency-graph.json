@@ -446,7 +446,7 @@
 			"from": "node-versatiles-google-cloud",
 			"to": "node-release-tool",
 			"kind": "npm",
-			"detail": "@versatiles/release-tool@^2.20.0",
+			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
 			"line": 77
 		},
@@ -454,7 +454,7 @@
 			"from": "node-versatiles-google-cloud",
 			"to": "node-versatiles-container",
 			"kind": "npm",
-			"detail": "@versatiles/container@^2.1.0",
+			"detail": "@versatiles/container@^2.1.1",
 			"path": "package.json",
 			"line": 63
 		},
@@ -462,7 +462,7 @@
 			"from": "node-versatiles-google-cloud",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^7.0.1",
+			"detail": "@versatiles/style@^8.1.1",
 			"path": "package.json",
 			"line": 64
 		},
