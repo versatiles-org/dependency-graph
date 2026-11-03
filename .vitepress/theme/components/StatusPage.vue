@@ -13,9 +13,14 @@ import {
 	isStale,
 	listRepos,
 	pinLocation,
+	waitingOn,
 } from '../../../scripts/dependency-graph/status-view';
 import type { CiState } from '../../../scripts/dependency-graph/repo-status';
-import { buildQueueGraph, type GraphEdge } from '../../../scripts/dependency-graph/queue-graph';
+import {
+	buildQueueGraph,
+	type GraphEdge,
+	type GraphRow,
+} from '../../../scripts/dependency-graph/queue-graph';
 
 /** The same marks as the terminal report, so colour never has to speak alone. */
 const STATUS: Record<Status, { mark: string; label: string; one: string; many: string }> = {
@@ -112,7 +117,11 @@ const legend = computed(() =>
 const repoUrl = (repo: string): string => `https://github.com/${data?.org}/${repo}`;
 const fileUrl = (repo: string, path: string): string => `${repoUrl(repo)}/blob/HEAD/${path}`;
 
-const graph = computed(() => buildQueueGraph(filtered.value.queue, report?.publishes ?? {}));
+/** Taken from the whole queue, so that a filter cannot hide why a repository waits. */
+const waiting = report ? waitingOn(report) : {};
+const graph = computed(() =>
+	buildQueueGraph(filtered.value.queue, report?.publishes ?? {}, waiting),
+);
 
 /* Where the columns start, around a graph as wide as it has lanes. */
 const GRAPH_LEFT = 296;
@@ -139,13 +148,26 @@ const rowLit = (repo: string): boolean =>
 			(edge) => edgeLit(edge) && (edge.consumer === repo || edge.provider === repo),
 		),
 	);
+const banded = (row: GraphRow, index: number): boolean => row.position !== null && index % 2 === 0;
+/** What a label sits on, so that it can hide the lines passing behind it. */
+const rowBackground = (row: GraphRow, index: number): string =>
+	active.value === row.repo
+		? 'var(--vp-c-brand-soft)'
+		: banded(row, index)
+			? 'var(--vp-c-bg-soft)'
+			: 'var(--vp-c-bg)';
 const togglePin = (repo: string): void => {
 	pinned.value = pinned.value === repo ? null : repo;
 };
 
 /** The first package ends up on top: later ones are painted first, each halo under its lines. */
 const paintOrder = computed(() => [...graph.value.lanes].reverse());
-const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
+/** A lane with only dotted lines is grey. */
+const laneColored = (index: number): boolean => graph.value.lanes[index]?.color != null;
+const laneColor = (index: number): string => {
+	const color = graph.value.lanes[index]?.color ?? null;
+	return color === null ? 'var(--vp-c-text-2)' : `var(--st-lane-${color % 6})`;
+};
 </script>
 
 <template>
@@ -257,6 +279,12 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 							Development dependency
 						</li>
 						<li>
+							<svg width="32" height="8" viewBox="0 0 32 8" aria-hidden="true">
+								<path d="M 2 4 L 30 4" class="graph-key-dots" />
+							</svg>
+							Not behind yet, but will be once that one is released
+						</li>
+						<li>
 							<span class="mark is-range" aria-hidden="true">{{ STATUS.range.mark }}</span>
 							The version range has to change
 						</li>
@@ -292,7 +320,7 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 								class="graph-row"
 								:class="{
 									'in-queue': row.position !== null,
-									banded: row.position !== null && index % 2 === 0,
+									banded: banded(row, index),
 									active: active === row.repo,
 									faint: !rowLit(row.repo),
 								}"
@@ -314,7 +342,9 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 									<a
 										:href="repoUrl(row.repo)"
 										:style="
-											row.lane !== null ? { color: laneColor(row.lane) } : undefined
+											row.lane !== null && laneColored(row.lane)
+												? { color: laneColor(row.lane) }
+												: undefined
 										"
 										>{{ row.repo }}</a
 									>
@@ -378,21 +408,31 @@ const laneColor = (index: number): string => `var(--st-lane-${index % 6})`;
 									:style="{ '--lane': laneColor(lane.index) }"
 									:class="{ faint: !laneLit(lane) }"
 								>
-									<path class="lane-halo" :d="lane.halo" />
-									<path class="lane-line" :d="lane.line" />
+									<path v-if="lane.halo" class="lane-halo" :d="lane.halo" />
+									<path v-if="lane.line" class="lane-line" :d="lane.line" />
+									<path
+										v-if="lane.dottedLine"
+										class="lane-line dotted"
+										:d="lane.dottedLine"
+									/>
 									<path class="lane-head" :d="lane.heads" />
 									<path
 										v-for="edge in lane.edges"
 										:key="edge.consumer"
 										class="lane-line"
-										:class="{ dashed: edge.dashed, faint: !edgeLit(edge) }"
+										:class="{
+											dashed: edge.dashed,
+											dotted: edge.dotted,
+											faint: !edgeLit(edge),
+										}"
 										:d="edge.line"
 									/>
 								</g>
 								<g
-									v-for="row in graph.rows"
+									v-for="(row, index) in graph.rows"
 									:key="row.repo"
 									:class="{ faint: !rowLit(row.repo) }"
+									:style="{ '--row-bg': rowBackground(row, index) }"
 								>
 									<circle
 										class="graph-node"
@@ -1076,6 +1116,14 @@ thead th {
 	stroke-dasharray: 6 4;
 }
 
+.graph-key-dots {
+	fill: none;
+	stroke: var(--vp-c-text-2);
+	stroke-linecap: round;
+	stroke-width: 1.5;
+	stroke-dasharray: 0 5;
+}
+
 .graph {
 	position: relative;
 }
@@ -1254,6 +1302,11 @@ thead th {
 	&.dashed {
 		stroke-dasharray: 6 4;
 	}
+
+	&.dotted {
+		stroke-width: 1.5;
+		stroke-dasharray: 0 5;
+	}
 }
 
 .lane-head {
@@ -1268,6 +1321,11 @@ thead th {
 .graph-label {
 	font-size: 13px;
 	font-weight: 600;
+	/* A later lane passes behind a label; an outline in the colour of the row hides it there. */
+	paint-order: stroke;
+	stroke: var(--row-bg);
+	stroke-linejoin: round;
+	stroke-width: 5px;
 }
 
 /* Packages --------------------------------------------------------------- */

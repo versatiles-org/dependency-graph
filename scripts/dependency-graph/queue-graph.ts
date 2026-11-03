@@ -8,6 +8,10 @@
  * repository depends on is further up. A cycle is the one exception, and bends
  * downwards instead.
  *
+ * A repository in the queue that others use without being behind on it yet gets
+ * a lane as well, in grey and with thin dotted lines: they will be behind once it
+ * is released, which is why it comes first.
+ *
  * It runs in the browser, so it may only import types from `drift.ts`.
  */
 
@@ -60,20 +64,27 @@ export interface GraphEdge {
 	consumer: string;
 	provider: string;
 	line: string;
+	/** Only development dependencies are behind. */
 	dashed: boolean;
+	/** Nothing is behind yet, but will be once the provider is released. */
+	dotted: boolean;
 }
 
 export interface GraphLane {
 	repo: string;
-	/** Colour index, and place from the left. */
+	/** Place from the left. */
 	index: number;
+	/** Colour index, or null for a lane with only dotted lines. */
+	color: number | null;
 	label: string;
 	x: number;
-	/** The line of the lane itself. */
+	/** The line of the lane itself, as far as solid lines join it. */
 	line: string;
+	/** Where it goes on with only dotted lines joining it. */
+	dottedLine: string;
 	/** The arrowheads pointing at its node. */
 	heads: string;
-	/** The lane and all of its connections as one path, so that it does not darken where they meet. */
+	/** The solid lines of the lane as one path, so that it does not darken where they meet. */
 	halo: string;
 	edges: GraphEdge[];
 }
@@ -95,22 +106,39 @@ export function laneLabel(repo: string): string {
 	return repo.replace(/^(node-|maplibre-)?versatiles-/, '');
 }
 
+/**
+ * `waiting` is what `waitingOn` returns: for each repository, the others in the
+ * queue it waits for without being behind on them.
+ */
 export function buildQueueGraph(
 	queue: QueueEntry[],
 	publishes: Record<string, string[]>,
+	waiting: Record<string, string[]> = {},
 ): QueueGraph {
+	// Only what is shown can be waited for.
+	const shown = new Set(queue.map((entry) => entry.consumer));
+	const waitsFor = (entry: QueueEntry): string[] =>
+		(waiting[entry.consumer] ?? []).filter((repo) => shown.has(repo));
+
 	// A lane comes in the order it is first needed, so one that ends early does not
 	// have to be passed by what comes after it.
 	const providers = [
 		...new Set(
 			queue.flatMap((entry) =>
-				[...new Set(entry.outdated.map((usage) => usage.provider))].sort((a, b) =>
-					a.localeCompare(b),
-				),
+				[
+					...new Set([...entry.outdated.map((usage) => usage.provider), ...waitsFor(entry)]),
+				].sort((a, b) => a.localeCompare(b)),
 			),
 		),
 	];
 	const laneIndex = new Map(providers.map((repo, index) => [repo, index]));
+	const behindOn = new Set(
+		queue.flatMap((entry) => entry.outdated.map((usage) => usage.provider)),
+	);
+	// Grey lanes take no colour, so that a package keeps its colour whatever else is shown.
+	const laneColor = new Map(
+		providers.filter((repo) => behindOn.has(repo)).map((repo, index) => [repo, index]),
+	);
 	const laneX = (index: number): number => FIRST_LANE_X + index * LANE_GAP;
 
 	const inQueue = new Set(queue.map((entry) => entry.consumer));
@@ -176,43 +204,53 @@ export function buildQueueGraph(
 		// Several packages of one repository still make one line to its lane.
 		const edges = queue.flatMap((entry): GraphEdge[] => {
 			const usages = entry.outdated.filter((usage) => usage.provider === repo);
-			if (usages.length === 0) return [];
+			const waits = waitsFor(entry).includes(repo);
+			if (usages.length === 0 && !waits) return [];
 			const row = rowOf.get(entry.consumer)!;
 			return [
 				{
 					consumer: entry.consumer,
 					provider: repo,
 					line: edgeLine(row.nodeX, x, row.y, own.y),
-					dashed: usages.every((usage) => isDev(usage)),
+					dashed: usages.length > 0 && usages.every((usage) => isDev(usage)),
+					dotted: usages.length === 0,
 				},
 			];
 		});
 
-		const ys = edges.map((edge) => rowOf.get(edge.consumer)!.y);
-		const below = ys.filter((y) => y > own.y);
-		const above = ys.filter((y) => y < own.y);
-		const parts: string[] = [];
+		const solid: string[] = [];
+		const dotted: string[] = [];
 		const heads: string[] = [];
-		if (below.length > 0) {
-			const start = own.y + LANE_OFFSET;
-			parts.push(`M ${x} ${start} L ${x} ${Math.max(...below) - CURVE}`);
-			heads.push(head(x, start, -1));
-		}
 		// Only a cycle has lines from above its own row.
-		if (above.length > 0) {
-			const start = own.y - LANE_OFFSET;
-			parts.push(`M ${x} ${start} L ${x} ${Math.min(...above) + CURVE}`);
-			heads.push(head(x, start, 1));
+		for (const direction of [1, -1] as const) {
+			const ends = edges
+				.map((edge) => ({ edge, y: rowOf.get(edge.consumer)!.y }))
+				.filter(({ y }) => (y - own.y) * direction > 0)
+				.map(({ edge, y }) => ({ dotted: edge.dotted, y: y - direction * CURVE }));
+			if (ends.length === 0) continue;
+			const start = own.y + direction * LANE_OFFSET;
+			const furthest = (list: typeof ends): number =>
+				Math.max(...list.map(({ y }) => y * direction)) * direction;
+			const solidEnds = ends.filter((end) => !end.dotted);
+			const turn = solidEnds.length > 0 ? furthest(solidEnds) : start;
+			if (solidEnds.length > 0) solid.push(`M ${x} ${start} L ${x} ${turn}`);
+			const end = furthest(ends);
+			if ((end - turn) * direction > 0) dotted.push(`M ${x} ${turn} L ${x} ${end}`);
+			heads.push(head(x, start, direction === 1 ? -1 : 1, solidEnds.length === 0 ? 0.6 : 1));
 		}
-		const line = parts.join(' ');
+		const line = solid.join(' ');
 		return {
 			repo,
 			index,
+			color: laneColor.get(repo) ?? null,
 			label: laneLabel(repo),
 			x,
 			line,
+			dottedLine: dotted.join(' '),
 			heads: heads.join(' '),
-			halo: [line, ...edges.map((edge) => edge.line)].join(' '),
+			halo: [line, ...edges.filter((edge) => !edge.dotted).map((edge) => edge.line)]
+				.filter(Boolean)
+				.join(' '),
 			edges,
 		};
 	});
@@ -238,7 +276,8 @@ function edgeLine(fromX: number, laneX: number, y: number, laneY: number): strin
 }
 
 /** An arrowhead with its base at `y`, pointing up (-1) or down (1) along a lane. */
-function head(x: number, y: number, direction: -1 | 1): string {
-	const tip = y + direction * HEAD_LENGTH;
-	return `M ${x - HEAD_HALF_WIDTH} ${y} L ${x} ${tip} L ${x + HEAD_HALF_WIDTH} ${y} Z`;
+function head(x: number, y: number, direction: -1 | 1, scale = 1): string {
+	const tip = y + direction * HEAD_LENGTH * scale;
+	const half = HEAD_HALF_WIDTH * scale;
+	return `M ${x - half} ${y} L ${x} ${tip} L ${x + half} ${y} Z`;
 }

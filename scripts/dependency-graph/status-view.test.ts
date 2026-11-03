@@ -5,6 +5,7 @@ import {
 	type DeploymentFinding,
 	type DeploymentReport,
 	type PinFinding,
+	type DriftReport,
 	type Release,
 	type Usage,
 } from './drift';
@@ -20,6 +21,7 @@ import {
 	isStale,
 	listRepos,
 	pinLocation,
+	waitingOn,
 } from './status-view';
 
 const now = new Date('2026-11-01T12:00:00Z');
@@ -181,6 +183,69 @@ describe('filterDeployments', () => {
 
 	it('leaves out a deployment with nothing that matches', () => {
 		expect(filterDeployments(deployments, 'nothing like it')).toEqual([]);
+	});
+});
+
+describe('waitingOn', () => {
+	// Only who uses whom matters here.
+	const report = (
+		uses: [string, string][],
+		queue: [string, string[]][],
+	): Pick<DriftReport, 'packages' | 'dependents'> =>
+		({
+			packages: [{ usages: uses.map(([consumer, provider]) => ({ consumer, provider })) }],
+			dependents: queue.map(([consumer, behind]) => ({
+				consumer,
+				outdated: behind.map((provider) => ({ consumer, provider })),
+			})),
+		}) as unknown as Pick<DriftReport, 'packages' | 'dependents'>;
+
+	const queue: [string, string[]][] = [
+		['container', ['x']],
+		['svelte', ['style']],
+		['server', ['style']],
+		['frontend', ['style']],
+		['tools', ['container']],
+	];
+	const uses: [string, string][] = [
+		['container', 'x'],
+		['svelte', 'style'],
+		['server', 'style'],
+		['server', 'container'],
+		['frontend', 'style'],
+		['frontend', 'server'],
+		['tools', 'container'],
+		['tools', 'svelte'],
+		['tools', 'helper'],
+		['helper', 'server'],
+	];
+
+	it('finds the repositories in the queue a repository uses without being behind on them', () => {
+		expect(waitingOn(report(uses, queue))).toEqual({
+			server: ['container'],
+			// One reached through a repository outside the queue counts as well.
+			tools: ['server', 'svelte'],
+			// What server waits for is for server to show.
+			frontend: ['server'],
+		});
+	});
+
+	it('leaves out anything outside the queue', () => {
+		expect(waitingOn(report(uses, [['tools', ['container']]]))).toEqual({});
+	});
+
+	it('copes with a cycle', () => {
+		const cycle = report(
+			[
+				['a', 'b'],
+				['b', 'a'],
+			],
+			[
+				['a', ['x']],
+				['b', ['x']],
+			],
+		);
+		expect(waitingOn(cycle)).toEqual({ a: ['b'], b: ['a'] });
 	});
 });
 

@@ -184,6 +184,62 @@ describe('buildQueueGraph', () => {
 		});
 	});
 
+	describe('with a repository waiting for another', () => {
+		const waiting = [
+			entry(1, 'container', usage('container', 'x')),
+			entry(2, 'server', usage('server', 'style')),
+			entry(3, 'tools', usage('tools', 'container')),
+		];
+
+		it('connects it to the lane of the other with a dotted line', () => {
+			const graph = buildQueueGraph(
+				[
+					entry(1, 'container', usage('container', 'x')),
+					entry(2, 'server', usage('server', 'container')),
+					entry(3, 'tools', usage('tools', 'style')),
+				],
+				{},
+				{ tools: ['container'] },
+			);
+			const lane = graph.lanes.find((each) => each.repo === 'container')!;
+			expect(lane.edges.map((edge) => [edge.consumer, edge.dotted])).toEqual([
+				['server', false],
+				['tools', true],
+			]);
+			expect(lane.color).not.toBeNull();
+			// The lane is solid as far as a solid line joins it, and dotted after that.
+			const y = (repo: string) => graph.rows.find((row) => row.repo === repo)!.y;
+			const [container, server, tools] = ['container', 'server', 'tools'].map(y);
+			expect(lane.line).toBe(`M ${lane.x} ${container + 18} L ${lane.x} ${server - 14}`);
+			expect(lane.dottedLine).toBe(`M ${lane.x} ${server - 14} L ${lane.x} ${tools - 14}`);
+			// Only solid lines are highlighted.
+			expect(lane.halo).toContain(lane.edges[0].line);
+			expect(lane.halo).not.toContain(lane.edges[1].line);
+		});
+
+		it('gives a lane with only dotted lines no colour, and keeps the others in theirs', () => {
+			const graph = buildQueueGraph(waiting.slice(0, 2), {}, { server: ['container'] });
+			expect(graph.lanes.map((lane) => [lane.repo, lane.color])).toEqual([
+				['x', 0],
+				['container', null],
+				['style', 1],
+			]);
+			const lane = graph.lanes[1];
+			const y = (repo: string) => graph.rows.find((row) => row.repo === repo)!.y;
+			const [container, server] = ['container', 'server'].map(y);
+			expect(lane.line).toBe('');
+			expect(lane.dottedLine).toBe(`M ${lane.x} ${container + 18} L ${lane.x} ${server - 14}`);
+			expect(lane.halo).toBe('');
+			// A smaller arrowhead, to suit the thin lines.
+			expect(lane.heads).toContain(`L ${lane.x} ${container + 18 - 5.4} `);
+		});
+
+		it('ignores a repository that is not shown', () => {
+			const graph = buildQueueGraph(waiting.slice(1, 2), {}, { server: ['container'] });
+			expect(graph.lanes.map((lane) => lane.repo)).toEqual(['style']);
+		});
+	});
+
 	it('copes with nothing to show', () => {
 		expect(buildQueueGraph([], {})).toMatchObject({ rows: [], lanes: [] });
 	});

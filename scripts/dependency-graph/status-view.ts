@@ -101,6 +101,43 @@ export interface QueueEntry extends DependentReport {
 	position: number;
 }
 
+/**
+ * What each repository in the queue waits for without being behind on it yet:
+ * the others in the queue whose packages it uses, directly or through
+ * repositories outside the queue. They come before it, and it will be behind on
+ * them as soon as they are released. Like the update order, it counts every
+ * usage, development dependencies included.
+ */
+export function waitingOn(
+	report: Pick<DriftReport, 'packages' | 'dependents'>,
+): Record<string, string[]> {
+	const providers = new Map<string, Set<string>>();
+	for (const { consumer, provider } of report.packages.flatMap((entry) => entry.usages)) {
+		if (!providers.has(consumer)) providers.set(consumer, new Set());
+		providers.get(consumer)!.add(provider);
+	}
+
+	const queued = new Set(report.dependents.map((dependent) => dependent.consumer));
+	const result: Record<string, string[]> = {};
+	for (const { consumer, outdated } of report.dependents) {
+		const behind = new Set(outdated.map((usage) => usage.provider));
+		const found = new Set<string>();
+		const seen = new Set([consumer]);
+		const open = [consumer];
+		while (open.length > 0) {
+			for (const provider of providers.get(open.pop()!) ?? []) {
+				if (seen.has(provider)) continue;
+				seen.add(provider);
+				// One in the queue stands for everything behind it.
+				if (!queued.has(provider)) open.push(provider);
+				else if (!behind.has(provider)) found.add(provider);
+			}
+		}
+		if (found.size > 0) result[consumer] = [...found].sort((a, b) => a.localeCompare(b));
+	}
+	return result;
+}
+
 export function filterDrift(
 	report: DriftReport,
 	{ query, hideDev, onlyOutdated }: DriftFilter,
