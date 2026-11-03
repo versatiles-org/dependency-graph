@@ -502,7 +502,7 @@
 			"from": "node-versatiles-svelte",
 			"to": "node-release-tool",
 			"kind": "npm",
-			"detail": "@versatiles/release-tool@^2.20.0",
+			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
 			"line": 58
 		},
@@ -510,7 +510,7 @@
 			"from": "node-versatiles-svelte",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^7.0.1",
+			"detail": "@versatiles/style@^8.1.1",
 			"path": "package.json",
 			"line": 84
 		},
@@ -846,7 +846,7 @@
 			"from": "versatiles-map-animator",
 			"to": "node-release-tool",
 			"kind": "npm",
-			"detail": "@versatiles/release-tool@^2.20.0",
+			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
 			"line": 43
 		},
@@ -854,7 +854,7 @@
 			"from": "versatiles-map-animator",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^7.1.0",
+			"detail": "@versatiles/style@^8.1.1",
 			"path": "package.json",
 			"line": 44
 		},
