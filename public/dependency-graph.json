@@ -774,7 +774,7 @@
 			"from": "versatiles-frontend",
 			"to": "maplibre-versatiles-styler",
 			"kind": "npm",
-			"detail": "maplibre-versatiles-styler@^2.5.0",
+			"detail": "maplibre-versatiles-styler@^2.6.0",
 			"path": "package.json",
 			"line": 63
 		},
@@ -782,7 +782,7 @@
 			"from": "versatiles-frontend",
 			"to": "node-release-tool",
 			"kind": "npm",
-			"detail": "@versatiles/release-tool@^2.20.0",
+			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
 			"line": 51
 		},
@@ -822,7 +822,7 @@
 			"from": "versatiles-frontend",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^7.0.1",
+			"detail": "@versatiles/style@^8.1.1",
 			"path": "package.json",
 			"line": 52
 		},
@@ -830,7 +830,7 @@
 			"from": "versatiles-frontend",
 			"to": "versatiles-svg-renderer",
 			"kind": "npm",
-			"detail": "@versatiles/maplibre-svg-export@^2.4.2",
+			"detail": "@versatiles/maplibre-svg-export@^2.5.0",
 			"path": "package.json",
 			"line": 50
 		},
