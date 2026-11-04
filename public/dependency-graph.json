@@ -414,7 +414,7 @@
 			"from": "landcover-vectors",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^7.1.0",
+			"detail": "@versatiles/style@^8.1.1",
 			"path": "package.json",
 			"line": 34
 		},
