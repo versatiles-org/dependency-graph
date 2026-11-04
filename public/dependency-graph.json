@@ -942,9 +942,9 @@
 			"from": "versatiles-studio",
 			"to": "node-release-tool",
 			"kind": "npm",
-			"detail": "@versatiles/release-tool@^2.20.0",
+			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
-			"line": 57
+			"line": 58
 		},
 		{
 			"from": "versatiles-studio",
@@ -1022,9 +1022,9 @@
 			"from": "versatiles-studio",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^7.1.0",
+			"detail": "@versatiles/style@^8.1.1",
 			"path": "package.json",
-			"line": 88
+			"line": 89
 		},
 		{
 			"from": "versatiles-style",
@@ -1038,7 +1038,7 @@
 			"from": "versatiles-svg-renderer",
 			"to": "node-release-tool",
 			"kind": "npm",
-			"detail": "@versatiles/release-tool@^2.20.0",
+			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
 			"line": 60
 		},
@@ -1046,7 +1046,7 @@
 			"from": "versatiles-svg-renderer",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^7.0.1",
+			"detail": "@versatiles/style@^8.1.1",
 			"path": "package.json",
 			"line": 61
 		}
