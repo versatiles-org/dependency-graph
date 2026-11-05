@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue';
 import { select } from 'd3-selection';
 import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
 import { data, type GraphLink, type GraphNode } from '../../../dependency_graph.data';
@@ -120,9 +120,56 @@ const figure = ref<HTMLElement>();
 const svg = ref<SVGSVGElement>();
 const expanded = ref(false);
 const size = ref({ width: 960, height: 560 });
+
+/**
+ * A phone, upright or on its side. There the graph on the page is only a preview
+ * that opens full screen: fitted into the column it is too small to read or to
+ * tap, and a canvas taking every swipe would trap the reader on the page. Wide
+ * until mounted, as the server cannot know the screen.
+ */
+const NARROW_QUERY = '(max-width: 720px), (max-height: 500px)';
+const narrow = ref(false);
+let narrowQuery: MediaQueryList | undefined;
+function onNarrowChange(): void {
+	narrow.value = narrowQuery?.matches ?? false;
+}
+/** On a phone the filters wait behind one button, so that the graph keeps the screen. */
+const filtersOpen = ref(false);
+
+/** The layout's own extent, which every fit starts from. */
+const bounds = (() => {
+	let minX = Infinity;
+	let minY = Infinity;
+	let maxX = -Infinity;
+	let maxY = -Infinity;
+	for (const node of nodes) {
+		minX = Math.min(minX, node.x - node.w / 2);
+		maxX = Math.max(maxX, node.x + node.w / 2);
+		minY = Math.min(minY, node.y - node.h / 2);
+		maxY = Math.max(maxY, node.y + node.h / 2);
+	}
+	return { minX, minY, maxX, maxY };
+})();
+
+const PADDING = 24;
+/** Far enough out that the whole graph fits on a phone held sideways. */
+const MIN_SCALE = 0.1;
+
 // Fitted from the start, so the server-rendered page already shows the graph.
 const transform = shallowRef<ZoomTransform>(fittedTransform());
+/** Under the mouse. */
 const hovered = ref<string | null>(null);
+/** Clicked or tapped, which is the only way to isolate a repository on a touch screen. */
+const selected = ref<string | null>(null);
+const selectedNode = computed(() =>
+	selected.value === null ? null : (byName.get(selected.value) ?? null),
+);
+
+/** The preview on a phone is as high as the graph needs at the column's width. */
+const previewHeight = computed(() => {
+	const ratio = (bounds.maxY - bounds.minY) / Math.max(bounds.maxX - bounds.minX, 1);
+	return Math.round(ratio * (size.value.width - PADDING * 2) + PADDING * 2);
+});
 
 /* --------------------------------------------------------------------------
  * Camera
@@ -135,24 +182,18 @@ const hovered = ref<string | null>(null);
 let userMoved = false;
 
 function fittedTransform(): ZoomTransform {
-	let minX = Infinity;
-	let minY = Infinity;
-	let maxX = -Infinity;
-	let maxY = -Infinity;
-	for (const node of nodes) {
-		minX = Math.min(minX, node.x - node.w / 2);
-		maxX = Math.max(maxX, node.x + node.w / 2);
-		minY = Math.min(minY, node.y - node.h / 2);
-		maxY = Math.max(maxY, node.y + node.h / 2);
-	}
+	const { minX, minY, maxX, maxY } = bounds;
 	if (!Number.isFinite(minX)) return zoomIdentity;
 
-	const padding = 24;
 	const { width, height } = size.value;
+	const fitX = (width - PADDING * 2) / Math.max(maxX - minX, 1);
+	const fitY = (height - PADDING * 2) / Math.max(maxY - minY, 1);
+	// Full screen on a phone, the graph fills the screen and pans the other way:
+	// fitted whole, it would be a strip too small to read or to tap.
+	const cover = narrow.value && expanded.value;
 	const scale = Math.min(
 		1.1,
-		Math.max(0.2, (width - padding * 2) / Math.max(maxX - minX, 1)),
-		Math.max(0.2, (height - padding * 2) / Math.max(maxY - minY, 1)),
+		Math.max(MIN_SCALE, cover ? Math.max(fitX, fitY) : Math.min(fitX, fitY)),
 	);
 	return zoomIdentity
 		.translate(width / 2 - ((minX + maxX) / 2) * scale, height / 2 - ((minY + maxY) / 2) * scale)
@@ -175,7 +216,7 @@ function resetView(): void {
 }
 
 const zoomBehaviour = zoom<SVGSVGElement, unknown>()
-	.scaleExtent([0.2, 3])
+	.scaleExtent([MIN_SCALE, 3])
 	.on('zoom', (event: { transform: ZoomTransform; sourceEvent: unknown }) => {
 		transform.value = event.transform;
 		// sourceEvent is null when fitView moved the camera itself.
@@ -204,11 +245,11 @@ async function toggleExpanded(): Promise<void> {
 				// Leaving the overlay behind would trap the reader; the class goes either way.
 			}
 		}
-		expanded.value = false;
+		setExpanded(false);
 		return;
 	}
 
-	expanded.value = true;
+	setExpanded(true);
 	try {
 		await element.requestFullscreen();
 	} catch {
@@ -216,14 +257,30 @@ async function toggleExpanded(): Promise<void> {
 	}
 }
 
+/**
+ * On a phone the camera starts over on the way in and on the way out: the full
+ * screen fits the graph differently, and the preview must show all of it again.
+ */
+function setExpanded(value: boolean): void {
+	if (expanded.value === value) return;
+	expanded.value = value;
+	if (!narrow.value) return;
+	filtersOpen.value = false;
+	// The preview has no room to say why most of it would be dimmed.
+	if (!value) selected.value = null;
+	userMoved = false;
+	// After the canvas has its new size; the resize observer only catches a change of it.
+	void nextTick(fitView);
+}
+
 function onFullscreenChange(): void {
-	if (!document.fullscreenElement) expanded.value = false;
+	if (!document.fullscreenElement) setExpanded(false);
 }
 
 /** Escape leaves the overlay; real full screen handles that key itself. */
 function onKeydown(event: KeyboardEvent): void {
 	if (event.key === 'Escape' && expanded.value && !document.fullscreenElement) {
-		expanded.value = false;
+		setExpanded(false);
 	}
 }
 
@@ -232,7 +289,7 @@ function onKeydown(event: KeyboardEvent): void {
  * ----------------------------------------------------------------------- */
 
 const view = computed(() => {
-	const active = hovered.value;
+	const active = hovered.value ?? selected.value;
 	const shownNodes = visible.value.shown;
 	const activeLinks = new Set(visible.value.links);
 
@@ -303,10 +360,25 @@ function pathOf(points: Point[]): string {
 	return `${path} L${at(points[points.length - 1])}`;
 }
 
-/** Native tooltip: what the repository is, and where it sits in the project. */
-function describe(node: GraphNode): string {
+/** Where the repository sits in the project, and what it is. */
+function about(node: GraphNode): string {
 	const tags = node.tags.map((tag) => tagTitles.get(tag) ?? tag).join(', ');
-	return `${node.name} — ${tags}${node.description ? `. ${node.description}` : ''}`;
+	return `${tags}${node.description ? `. ${node.description}` : ''}`;
+}
+
+/** Native tooltip, which only a mouse can bring up. */
+function describe(node: GraphNode): string {
+	return `${node.name} — ${about(node)}`;
+}
+
+/** A click or tap keeps a repository isolated, and a second one lets it go. */
+function toggleSelected(name: string): void {
+	selected.value = selected.value === name ? null : name;
+}
+
+/** A finger also enters and leaves, but only a mouse can point without choosing. */
+function onPointerEnter(event: PointerEvent, name: string): void {
+	if (event.pointerType === 'mouse') hovered.value = name;
 }
 
 /**
@@ -331,9 +403,12 @@ onMounted(() => {
 	const element = root.value;
 	if (!element) return;
 
+	// The size is the canvas's own, never a floor: a viewBox taller than the canvas
+	// would shrink the whole drawing a second time.
 	observer = new ResizeObserver(([entry]) => {
-		const width = Math.max(280, entry.contentRect.width);
-		const height = Math.max(280, entry.contentRect.height);
+		const { width, height } = entry.contentRect;
+		// Hidden, it has no size to fit.
+		if (width === 0 || height === 0) return;
 		if (width === size.value.width && height === size.value.height) return;
 		size.value = { width, height };
 		// The layout has its own coordinates, so only the camera has to react.
@@ -343,8 +418,12 @@ onMounted(() => {
 	document.addEventListener('fullscreenchange', onFullscreenChange);
 	document.addEventListener('keydown', onKeydown);
 
+	narrowQuery = window.matchMedia(NARROW_QUERY);
+	onNarrowChange();
+	narrowQuery.addEventListener('change', onNarrowChange);
+
 	const box = element.getBoundingClientRect();
-	size.value = { width: Math.max(280, box.width), height: Math.max(280, box.height) };
+	if (box.width > 0 && box.height > 0) size.value = { width: box.width, height: box.height };
 
 	if (svg.value) select(svg.value).call(zoomBehaviour);
 	fitView();
@@ -354,12 +433,28 @@ onBeforeUnmount(() => {
 	observer?.disconnect();
 	document.removeEventListener('fullscreenchange', onFullscreenChange);
 	document.removeEventListener('keydown', onKeydown);
+	narrowQuery?.removeEventListener('change', onNarrowChange);
 });
 </script>
 
 <template>
-	<figure ref="figure" class="dependency-graph" :class="{ expanded }">
-		<div class="controls">
+	<figure ref="figure" class="dependency-graph" :class="{ expanded, narrow }">
+		<div v-if="narrow && expanded" class="toolbar">
+			<button
+				type="button"
+				class="chip plain"
+				:aria-expanded="filtersOpen"
+				@click="filtersOpen = !filtersOpen"
+			>
+				{{ filtersOpen ? 'Hide filters' : 'Filters' }}
+			</button>
+			<div class="group end">
+				<button type="button" class="chip plain" @click="resetView">Reset view</button>
+				<button type="button" class="chip plain" @click="toggleExpanded">Close</button>
+			</div>
+		</div>
+
+		<div v-if="!narrow || (expanded && filtersOpen)" class="controls">
 			<div class="group" role="group" aria-label="Kinds of dependency">
 				<span class="group-label">Dependencies</span>
 				<button
@@ -409,7 +504,7 @@ onBeforeUnmount(() => {
 				</button>
 			</div>
 
-			<div class="group end">
+			<div v-if="!narrow" class="group end">
 				<button type="button" class="chip plain" @click="resetView">Reset view</button>
 				<button
 					type="button"
@@ -422,12 +517,17 @@ onBeforeUnmount(() => {
 			</div>
 		</div>
 
-		<div ref="root" class="canvas">
+		<div
+			ref="root"
+			class="canvas"
+			:style="narrow && !expanded ? { height: `${previewHeight}px` } : undefined"
+		>
 			<svg
 				ref="svg"
 				class="stage"
 				:viewBox="`0 0 ${size.width} ${size.height}`"
 				:aria-label="`Dependencies between ${nodes.length} repositories`"
+				@click="selected = null"
 			>
 				<defs>
 					<marker
@@ -468,8 +568,9 @@ onBeforeUnmount(() => {
 						:class="{ dimmed: entry.dimmed, filtered: entry.filtered }"
 						:style="tagStyles.get(primaryTag(entry.node))"
 						:transform="`translate(${entry.node.x},${entry.node.y})`"
-						@pointerenter="hovered = entry.node.name"
+						@pointerenter="onPointerEnter($event, entry.node.name)"
 						@pointerleave="hovered = null"
+						@click.stop="toggleSelected(entry.node.name)"
 					>
 						<title>{{ describe(entry.node) }}</title>
 						<rect
@@ -483,13 +584,37 @@ onBeforeUnmount(() => {
 					</g>
 				</g>
 			</svg>
+
+			<!-- Covering the canvas, so that a swipe across the preview scrolls the page. -->
+			<button v-if="narrow && !expanded" type="button" class="explore" @click="toggleExpanded">
+				<span>Tap to explore</span>
+			</button>
+
+			<p v-else-if="selectedNode" class="selection" role="status">
+				<strong>{{ selectedNode.name }}</strong> — {{ about(selectedNode) }}
+				<button
+					type="button"
+					class="close"
+					aria-label="Stop isolating this repository"
+					@click="selected = null"
+				>
+					×
+				</button>
+			</p>
 		</div>
 
-		<figcaption class="status">
+		<figcaption v-if="!(narrow && expanded)" class="status">
 			Highlighting {{ visible.nodes.length }} of {{ nodes.length }} repositories and
 			{{ visible.links.length }} of {{ links.length }} dependencies. Arrows run left to right,
-			from a repository to what it depends on. Scroll to zoom, drag the background to pan, hover
-			a repository to isolate it.
+			from a repository to what it depends on.
+			<template v-if="narrow">
+				Tap the graph to open it full screen, then pinch to zoom, drag to pan and tap a
+				repository to isolate it.
+			</template>
+			<template v-else>
+				Scroll to zoom, drag the background to pan, point at a repository to isolate it, and
+				click it to keep it isolated.
+			</template>
 		</figcaption>
 	</figure>
 </template>
@@ -619,6 +744,103 @@ onBeforeUnmount(() => {
 .dependency-graph.expanded .canvas {
 	flex: 1;
 	height: auto;
+}
+
+/* Phones ----------------------------------------------------------------- */
+
+.toolbar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+
+/* Big enough for a finger. */
+.narrow .chip {
+	min-height: 36px;
+	padding: 4px 12px;
+}
+
+/* A phone held sideways still sees the page around the preview. */
+.narrow .canvas {
+	max-height: 60vh;
+}
+
+.dependency-graph.narrow.expanded .canvas {
+	max-height: none;
+}
+
+/*
+ * Over the graph rather than above it: pushing the canvas down would shrink it,
+ * and the camera would fit the graph again each time the filters open.
+ */
+.dependency-graph.narrow.expanded .controls {
+	position: absolute;
+	top: calc(max(8px, env(safe-area-inset-top)) + 44px);
+	inset-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
+	z-index: 1;
+	max-height: 70%;
+	overflow-y: auto;
+	padding: 12px;
+	border: 1px solid var(--vp-c-divider);
+	border-radius: 8px;
+	background: var(--vp-c-bg);
+	box-shadow: var(--vp-shadow-3);
+}
+
+/* Clear of a notch or a rounded corner. */
+.dependency-graph.narrow.expanded {
+	padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+		max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+}
+
+.explore {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	padding-bottom: 12px;
+	cursor: pointer;
+
+	span {
+		padding: 6px 14px;
+		border: 1px solid var(--vp-c-divider);
+		border-radius: 999px;
+		background: var(--vp-c-bg);
+		color: var(--vp-c-text-1);
+		font-size: 13px;
+		box-shadow: var(--vp-shadow-2);
+	}
+}
+
+.selection {
+	position: absolute;
+	inset: auto 8px 8px;
+	margin: 0;
+	padding: 8px 40px 8px 12px;
+	border: 1px solid var(--vp-c-divider);
+	border-radius: 8px;
+	background: var(--vp-c-bg);
+	color: var(--vp-c-text-2);
+	font-size: 13px;
+	line-height: 1.4;
+	box-shadow: var(--vp-shadow-2);
+
+	strong {
+		color: var(--vp-c-text-1);
+	}
+
+	.close {
+		position: absolute;
+		top: 2px;
+		right: 2px;
+		width: 36px;
+		height: 36px;
+		color: var(--vp-c-text-2);
+		font-size: 20px;
+		line-height: 1;
+	}
 }
 
 /* Canvas ----------------------------------------------------------------- */
