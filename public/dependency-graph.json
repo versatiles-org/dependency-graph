@@ -364,11 +364,27 @@
 		},
 		{
 			"from": "elevation",
+			"to": "node-release-tool",
+			"kind": "npm",
+			"detail": "@versatiles/release-tool@^2.21.0",
+			"path": "package.json",
+			"line": 25
+		},
+		{
+			"from": "elevation",
 			"to": "versatiles-rs",
 			"kind": "manual",
 			"detail": "runs the versatiles CLI to convert and merge the elevation tiles",
 			"path": "",
 			"line": 0
+		},
+		{
+			"from": "elevation",
+			"to": "versatiles-rs",
+			"kind": "npm",
+			"detail": "@versatiles/versatiles-rs@^5.7.0",
+			"path": "package.json",
+			"line": 40
 		},
 		{
 			"from": "homebrew-versatiles",

@@ -70,7 +70,7 @@ Pipelines that turn open data into the tilesets VersaTiles publishes. Needed onl
 
 | Repository                                                                             | Description                                                                               | Depends on | Used by |
 | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------- | ------- |
-| [elevation](https://github.com/versatiles-org/elevation)                               | Converts Copernicus elevation data into Terrarium-encoded tiles in VersaTiles containers. | 1          | 0       |
+| [elevation](https://github.com/versatiles-org/elevation)                               | Converts Copernicus elevation data into Terrarium-encoded tiles in VersaTiles containers. | 2          | 0       |
 | [landcover-vectors](https://github.com/versatiles-org/landcover-vectors)               | Generate landcover vector tiles from ESA Worldcover                                       | 2          | 0       |
 | [opendem-gebco-bathymetry](https://github.com/versatiles-org/opendem-gebco-bathymetry) | Versatiles Container from GEBCO Bathymetry Data provided by OpenDEM                       | 1          | 0       |
 | [orthophotos](https://github.com/versatiles-org/orthophotos)                           | Processing pipeline and hosting setup for global and regional orthophoto layers.          | 4          | 0       |
@@ -106,7 +106,7 @@ Housekeeping for the maintainers. Nothing here is needed to use VersaTiles.
 | Repository                                                               | Description                                                                                   | Depends on | Used by |
 | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- | ---------- | ------- |
 | [dependency-graph](https://github.com/versatiles-org/dependency-graph)   | How the VersaTiles repositories depend on each other, and which dependencies are out of date. | 0          | 0       |
-| [node-release-tool](https://github.com/versatiles-org/node-release-tool) | Helper tool for automating Node.js package releases across VersaTiles repositories.           | 0          | 15      |
+| [node-release-tool](https://github.com/versatiles-org/node-release-tool) | Helper tool for automating Node.js package releases across VersaTiles repositories.           | 0          | 16      |
 
 ## How each link is declared
 
@@ -118,13 +118,15 @@ listed below, and can be followed back to it.
 
 The repository lists a `@versatiles/…` package among its npm dependencies.
 
-::: details Where these 36 links come from
+::: details Where these 38 links come from
 
 | From                         | To                         | Found                                    | Source                                                                                                    |
 | ---------------------------- | -------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | download.versatiles.org      | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/download.versatiles.org/blob/main/package.json#L60)      |
 | download.versatiles.org      | node-versatiles-container  | `@versatiles/container@^2.1.0`           | [package.json](https://github.com/versatiles-org/download.versatiles.org/blob/main/package.json#L46)      |
 | download.versatiles.org      | node-versatiles-svelte     | `@versatiles/svelte@^3.0.1`              | [package.json](https://github.com/versatiles-org/download.versatiles.org/blob/main/package.json#L47)      |
+| elevation                    | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/elevation/blob/main/package.json#L25)                    |
+| elevation                    | versatiles-rs              | `@versatiles/versatiles-rs@^5.7.0`       | [package.json](https://github.com/versatiles-org/elevation/blob/main/package.json#L40)                    |
 | landcover-vectors            | versatiles-rs              | `@versatiles/versatiles-rs@^5.6.0`       | [package.json](https://github.com/versatiles-org/landcover-vectors/blob/main/package.json#L35)            |
 | landcover-vectors            | versatiles-style           | `@versatiles/style@^8.1.1`               | [package.json](https://github.com/versatiles-org/landcover-vectors/blob/main/package.json#L34)            |
 | maplibre-versatiles-styler   | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/maplibre-versatiles-styler/blob/main/package.json#L54)   |
