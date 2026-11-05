@@ -18,21 +18,92 @@
 import type { OutdatedUsage } from './drift';
 import { isDev, type QueueEntry } from './status-view';
 
-const ROW_HEIGHT = 44;
-const DETAIL_HEIGHT = 28;
-const RELEASES_TOP = 64;
-const GROUP_GAP = 32;
-/** Where the node of a repository without a lane of its own sits. */
-export const NODE_X = 24;
-const FIRST_LANE_X = 84;
-const LANE_GAP = 52;
-const CURVE = 14;
-/** Keeps the end of a lane clear of the node it belongs to. */
-const LANE_OFFSET = 18;
-const HEAD_LENGTH = 9;
-const HEAD_HALF_WIDTH = 6;
-/** Room right of the last lane for its label. */
-const LABEL_ROOM = 96;
+/** The sizes of a layout, which the page reads as well. */
+export interface GraphMetrics {
+	/**
+	 * Whether the text of a row stacks right of the lanes, under its name, instead
+	 * of standing in columns of its own.
+	 */
+	stacked: boolean;
+	/** Height of a row without usages, and the least any row gets. */
+	rowHeight: number;
+	/** Room per outdated usage in a row. */
+	detailHeight: number;
+	/** Room a row needs besides its usages. */
+	rowBase: number;
+	/** Where the usages of a stacked row start, below its name. */
+	detailsTop: number;
+	/** Where the label above the first group of rows goes. */
+	firstLabelTop: number;
+	/** Where the rows of packages with a newer release start. */
+	releasesTop: number;
+	/** From the label above the rows to update to the first of them, plus 8. */
+	groupGap: number;
+	/** Height of the node within its row, or null for the middle of the row. */
+	nodeTop: number | null;
+	nodeRadius: number;
+	/** Where the node of a repository without a lane of its own sits. */
+	nodeX: number;
+	firstLaneX: number;
+	laneGap: number;
+	curve: number;
+	/** Keeps the end of a lane clear of the node it belongs to. */
+	laneOffset: number;
+	headLength: number;
+	headHalfWidth: number;
+	/** Room right of the last lane, for its label or as a gap before the text. */
+	labelRoom: number;
+}
+
+/** Columns side by side, scrolling sideways where the screen is narrower. */
+export const WIDE: GraphMetrics = {
+	stacked: false,
+	rowHeight: 44,
+	detailHeight: 28,
+	rowBase: 16,
+	detailsTop: 0,
+	firstLabelTop: 40,
+	releasesTop: 64,
+	groupGap: 32,
+	nodeTop: null,
+	nodeRadius: 7,
+	nodeX: 24,
+	firstLaneX: 84,
+	laneGap: 52,
+	curve: 14,
+	laneOffset: 18,
+	headLength: 9,
+	headHalfWidth: 6,
+	labelRoom: 96,
+};
+
+/**
+ * For phones, where nothing may scroll sideways. The eight lanes the queue can
+ * have end 140 pixels in, which leaves a 390-pixel phone about 200 for the text:
+ * enough for the longest name. A row is a name line and a line of packages, then
+ * two lines per usage, each 18 high; the node sits on the name line, so that the
+ * lines meet the row where the reader looks for it.
+ */
+export const NARROW: GraphMetrics = {
+	stacked: true,
+	rowHeight: 86,
+	detailHeight: 36,
+	rowBase: 50,
+	detailsTop: 44,
+	firstLabelTop: 0,
+	releasesTop: 40,
+	groupGap: 48,
+	nodeTop: 13,
+	nodeRadius: 5,
+	nodeX: 10,
+	firstLaneX: 30,
+	laneGap: 14,
+	curve: 7,
+	laneOffset: 14,
+	headLength: 7,
+	headHalfWidth: 4.5,
+	labelRoom: 12,
+};
 
 export interface GraphDetail extends OutdatedUsage {
 	/** Offset of its text within the row. */
@@ -114,7 +185,11 @@ export function buildQueueGraph(
 	queue: QueueEntry[],
 	publishes: Record<string, string[]>,
 	waiting: Record<string, string[]> = {},
+	metrics: GraphMetrics = WIDE,
 ): QueueGraph {
+	const m = metrics;
+	const centre = (top: number, height: number): number =>
+		top + (m.nodeTop === null ? height / 2 : m.nodeTop);
 	// Only what is shown can be waited for.
 	const shown = new Set(queue.map((entry) => entry.consumer));
 	const waitsFor = (entry: QueueEntry): string[] =>
@@ -139,7 +214,7 @@ export function buildQueueGraph(
 	const laneColor = new Map(
 		providers.filter((repo) => behindOn.has(repo)).map((repo, index) => [repo, index]),
 	);
-	const laneX = (index: number): number => FIRST_LANE_X + index * LANE_GAP;
+	const laneX = (index: number): number => m.firstLaneX + index * m.laneGap;
 
 	const inQueue = new Set(queue.map((entry) => entry.consumer));
 	const released = providers.filter((repo) => !inQueue.has(repo));
@@ -148,15 +223,15 @@ export function buildQueueGraph(
 
 	const releaseRows = released.map((repo, index): GraphRow => {
 		const usages = usagesOf(repo);
-		const top = RELEASES_TOP + index * ROW_HEIGHT;
+		const top = m.releasesTop + index * m.rowHeight;
 		const lane = laneIndex.get(repo)!;
 		return {
 			repo,
 			position: null,
 			packages: [...new Set(usages.map((usage) => usage.name))].join(', '),
 			top,
-			height: ROW_HEIGHT,
-			y: top + ROW_HEIGHT / 2,
+			height: m.rowHeight,
+			y: centre(top, m.rowHeight),
 			nodeX: laneX(lane),
 			lane,
 			details: [],
@@ -165,28 +240,32 @@ export function buildQueueGraph(
 		};
 	});
 
-	const queueLabelTop = released.length > 0 ? RELEASES_TOP + released.length * ROW_HEIGHT + 8 : 40;
-	let next = queueLabelTop + GROUP_GAP - 8;
+	const queueLabelTop =
+		released.length > 0 ? m.releasesTop + released.length * m.rowHeight + 8 : m.firstLabelTop;
+	let next = queueLabelTop + m.groupGap - 8;
 	const queueRows = queue.map((entry): GraphRow => {
-		const height = Math.max(ROW_HEIGHT, 16 + entry.outdated.length * DETAIL_HEIGHT);
+		const height = Math.max(m.rowHeight, m.rowBase + entry.outdated.length * m.detailHeight);
 		const top = next;
 		next += height;
 		const lane = laneIndex.get(entry.consumer) ?? null;
+		// Stacked, a usage starts below the name, at the middle of its first line;
+		// otherwise the usages spread around the middle of the row.
+		const detailY = (index: number): number =>
+			m.stacked
+				? m.detailsTop + index * m.detailHeight + m.detailHeight / 4
+				: height / 2 + (index - (entry.outdated.length - 1) / 2) * m.detailHeight;
 		return {
 			repo: entry.consumer,
 			position: entry.position,
 			packages: (publishes[entry.consumer] ?? []).join(', ') || 'not published',
 			top,
 			height,
-			y: top + height / 2,
-			nodeX: lane === null ? NODE_X : laneX(lane),
+			y: centre(top, height),
+			nodeX: lane === null ? m.nodeX : laneX(lane),
 			lane,
 			details: entry.outdated.map((usage, index) => ({
 				...usage,
-				y:
-					entry.outdated.length === 1
-						? height / 2
-						: height / 2 + (index - (entry.outdated.length - 1) / 2) * DETAIL_HEIGHT,
+				y: detailY(index),
 				lane: laneIndex.get(usage.provider)!,
 			})),
 			latest: null,
@@ -211,7 +290,7 @@ export function buildQueueGraph(
 				{
 					consumer: entry.consumer,
 					provider: repo,
-					line: edgeLine(row.nodeX, x, row.y, own.y),
+					line: edgeLine(row.nodeX, x, row.y, own.y, m.curve),
 					dashed: usages.length > 0 && usages.every((usage) => isDev(usage)),
 					dotted: usages.length === 0,
 				},
@@ -226,9 +305,9 @@ export function buildQueueGraph(
 			const ends = edges
 				.map((edge) => ({ edge, y: rowOf.get(edge.consumer)!.y }))
 				.filter(({ y }) => (y - own.y) * direction > 0)
-				.map(({ edge, y }) => ({ dotted: edge.dotted, y: y - direction * CURVE }));
+				.map(({ edge, y }) => ({ dotted: edge.dotted, y: y - direction * m.curve }));
 			if (ends.length === 0) continue;
-			const start = own.y + direction * LANE_OFFSET;
+			const start = own.y + direction * m.laneOffset;
 			const furthest = (list: typeof ends): number =>
 				Math.max(...list.map(({ y }) => y * direction)) * direction;
 			const solidEnds = ends.filter((end) => !end.dotted);
@@ -236,7 +315,7 @@ export function buildQueueGraph(
 			if (solidEnds.length > 0) solid.push(`M ${x} ${start} L ${x} ${turn}`);
 			const end = furthest(ends);
 			if ((end - turn) * direction > 0) dotted.push(`M ${x} ${turn} L ${x} ${end}`);
-			heads.push(head(x, start, direction === 1 ? -1 : 1, solidEnds.length === 0 ? 0.6 : 1));
+			heads.push(head(m, x, start, direction === 1 ? -1 : 1, solidEnds.length === 0 ? 0.6 : 1));
 		}
 		const line = solid.join(' ');
 		return {
@@ -258,7 +337,7 @@ export function buildQueueGraph(
 	return {
 		rows,
 		lanes,
-		width: (providers.length > 0 ? laneX(providers.length - 1) : NODE_X) + LABEL_ROOM,
+		width: (providers.length > 0 ? laneX(providers.length - 1) : m.nodeX) + m.labelRoom,
 		height: next,
 		queueLabelTop,
 		hasReleases: released.length > 0,
@@ -266,18 +345,18 @@ export function buildQueueGraph(
 }
 
 /** Along the row from a node, then a quarter of a circle into the lane. */
-function edgeLine(fromX: number, laneX: number, y: number, laneY: number): string {
+function edgeLine(fromX: number, laneX: number, y: number, laneY: number, curve: number): string {
 	const right = laneX > fromX;
 	const up = laneY < y;
 	const sweep = right === up ? 0 : 1;
-	const beforeLane = right ? laneX - CURVE : laneX + CURVE;
-	const onLane = up ? y - CURVE : y + CURVE;
-	return `M ${fromX} ${y} L ${beforeLane} ${y} A ${CURVE} ${CURVE} 0 0 ${sweep} ${laneX} ${onLane}`;
+	const beforeLane = right ? laneX - curve : laneX + curve;
+	const onLane = up ? y - curve : y + curve;
+	return `M ${fromX} ${y} L ${beforeLane} ${y} A ${curve} ${curve} 0 0 ${sweep} ${laneX} ${onLane}`;
 }
 
 /** An arrowhead with its base at `y`, pointing up (-1) or down (1) along a lane. */
-function head(x: number, y: number, direction: -1 | 1, scale = 1): string {
-	const tip = y + direction * HEAD_LENGTH * scale;
-	const half = HEAD_HALF_WIDTH * scale;
+function head(m: GraphMetrics, x: number, y: number, direction: -1 | 1, scale = 1): string {
+	const tip = y + direction * m.headLength * scale;
+	const half = m.headHalfWidth * scale;
 	return `M ${x - half} ${y} L ${x} ${tip} L ${x + half} ${y} Z`;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { OutdatedUsage } from './drift';
-import { buildQueueGraph, laneLabel, NODE_X } from './queue-graph';
+import { buildQueueGraph, laneLabel, NARROW, WIDE } from './queue-graph';
 import type { QueueEntry } from './status-view';
 
 const usage = (consumer: string, provider: string, overrides: Partial<OutdatedUsage> = {}) =>
@@ -80,7 +80,7 @@ describe('buildQueueGraph', () => {
 		const [release, server] = graph.rows;
 		const [lane] = graph.lanes;
 		expect(lane.edges[0].line).toBe(
-			`M ${NODE_X} ${server.y} L ${lane.x - 14} ${server.y} A 14 14 0 0 0 ${lane.x} ${server.y - 14}`,
+			`M ${WIDE.nodeX} ${server.y} L ${lane.x - 14} ${server.y} A 14 14 0 0 0 ${lane.x} ${server.y - 14}`,
 		);
 		// The lane ends where the curve arrives, and points at the node of its package.
 		expect(lane.line).toBe(`M ${lane.x} ${release.y + 18} L ${lane.x} ${server.y - 14}`);
@@ -242,5 +242,54 @@ describe('buildQueueGraph', () => {
 
 	it('copes with nothing to show', () => {
 		expect(buildQueueGraph([], {})).toMatchObject({ rows: [], lanes: [] });
+	});
+
+	describe('stacked, for phones', () => {
+		const narrow = (entries: QueueEntry[]) => buildQueueGraph(entries, {}, {}, NARROW);
+
+		it('fits the eight lanes the queue can have into 140 pixels, leaving 200 for the text', () => {
+			const providers = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+			const graph = narrow(
+				providers.map((p, i) => entry(i + 1, `user-${p}`, usage(`user-${p}`, p))),
+			);
+			expect(graph.lanes).toHaveLength(8);
+			expect(graph.width).toBeLessThanOrEqual(140);
+			// A 390-pixel phone leaves 342 between the margins of the page.
+			expect(342 - graph.width).toBeGreaterThanOrEqual(200);
+		});
+
+		it('puts the node on the name line, and two lines per usage below the name', () => {
+			const { rows } = narrow(queue);
+			const choro = rows.find((row) => row.repo === 'choro')!;
+			expect(choro.y - choro.top).toBe(NARROW.nodeTop);
+			expect(choro.height).toBe(NARROW.rowBase + 2 * NARROW.detailHeight);
+			expect(choro.details.map((detail) => detail.y)).toEqual([53, 89]);
+			// Within a group, every row ends where the next one starts.
+			for (const group of [rows.slice(0, 3), rows.slice(3)]) {
+				for (let i = 1; i < group.length; i++) {
+					expect(group[i].top).toBe(group[i - 1].top + group[i - 1].height);
+				}
+			}
+		});
+
+		it('labels each group above its rows, with room for two lines', () => {
+			const graph = narrow(queue);
+			const [firstRelease] = graph.rows;
+			const firstQueued = graph.rows[3];
+			expect(firstRelease.top).toBe(NARROW.releasesTop);
+			expect(graph.queueLabelTop).toBe(NARROW.releasesTop + 3 * NARROW.rowHeight + 8);
+			expect(firstQueued.top).toBe(graph.queueLabelTop + 40);
+		});
+
+		it('draws smaller curves and arrowheads to suit the closer lanes', () => {
+			const graph = narrow([entry(1, 'server', usage('server', 'style'))]);
+			const [release, server] = graph.rows;
+			const [lane] = graph.lanes;
+			expect(lane.edges[0].line).toBe(
+				`M ${NARROW.nodeX} ${server.y} L ${lane.x - 7} ${server.y} A 7 7 0 0 0 ${lane.x} ${server.y - 7}`,
+			);
+			expect(lane.line).toBe(`M ${lane.x} ${release.y + 14} L ${lane.x} ${server.y - 7}`);
+			expect(lane.heads).toContain(`L ${lane.x} ${release.y + 7} `);
+		});
 	});
 });

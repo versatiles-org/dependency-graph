@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { data } from '../../../status.data';
 import type { PinFinding, Status } from '../../../scripts/dependency-graph/drift';
 import {
@@ -18,6 +18,8 @@ import {
 import type { CiState } from '../../../scripts/dependency-graph/repo-status';
 import {
 	buildQueueGraph,
+	NARROW,
+	WIDE,
 	type GraphEdge,
 	type GraphRow,
 } from '../../../scripts/dependency-graph/queue-graph';
@@ -119,15 +121,35 @@ const fileUrl = (repo: string, path: string): string => `${repoUrl(repo)}/blob/H
 
 /** Taken from the whole queue, so that a filter cannot hide why a repository waits. */
 const waiting = report ? waitingOn(report) : {};
+
+/**
+ * On a phone the graph stacks its text right of the lanes, so that nothing scrolls
+ * sideways. Wide until mounted: the server cannot know the screen.
+ */
+const narrow = ref(false);
+let narrowQuery: MediaQueryList | undefined;
+const onNarrowChange = (): void => {
+	narrow.value = narrowQuery?.matches ?? false;
+};
+onMounted(() => {
+	narrowQuery = window.matchMedia('(max-width: 720px)');
+	onNarrowChange();
+	narrowQuery.addEventListener('change', onNarrowChange);
+});
+onBeforeUnmount(() => narrowQuery?.removeEventListener('change', onNarrowChange));
+
+const metrics = computed(() => (narrow.value ? NARROW : WIDE));
 const graph = computed(() =>
-	buildQueueGraph(filtered.value.queue, report?.publishes ?? {}, waiting),
+	buildQueueGraph(filtered.value.queue, report?.publishes ?? {}, waiting, metrics.value),
 );
 
 /* Where the columns start, around a graph as wide as it has lanes. */
-const GRAPH_LEFT = 296;
-const behindLeft = computed(() => GRAPH_LEFT + graph.value.width);
+const graphLeft = computed(() => (narrow.value ? 0 : 296));
+const behindLeft = computed(() => graphLeft.value + graph.value.width);
 const updateLeft = computed(() => behindLeft.value + 88);
-const graphMinWidth = computed(() => updateLeft.value + 240);
+const graphMinWidth = computed(() => (narrow.value ? 0 : updateLeft.value + 240));
+/** Stacked, all text starts right of the lanes. */
+const textLeft = computed(() => `${graph.value.width}px`);
 
 /** Pointing at a row highlights its lines, and clicking keeps them highlighted. */
 const pinned = ref<string | null>(null);
@@ -294,20 +316,32 @@ const laneColor = (index: number): string => {
 							}}</span>
 							A lockfile update is enough
 						</li>
-						<li>Point at a row to highlight its lines, or click to keep them highlighted.</li>
+						<li>
+							Point at a row to highlight its lines, or click or tap it to keep them
+							highlighted.
+						</li>
 					</ul>
 					<div v-if="graph.rows.length > 0" class="scroll" tabindex="0">
 						<div
 							class="graph"
-							:style="{ height: `${graph.height}px`, minWidth: `${graphMinWidth}px` }"
+							:class="{ narrow }"
+							:style="{
+								height: `${graph.height}px`,
+								minWidth: `${graphMinWidth}px`,
+								'--text-left': textLeft,
+							}"
 						>
-							<div class="graph-head">
+							<div v-if="!narrow" class="graph-head">
 								<span :style="{ left: '36px' }">Repository and package</span>
-								<span :style="{ left: `${GRAPH_LEFT}px` }">Depends on</span>
+								<span :style="{ left: `${graphLeft}px` }">Depends on</span>
 								<span :style="{ left: `${behindLeft}px` }">Behind</span>
 								<span :style="{ left: `${updateLeft}px` }">Update</span>
 							</div>
-							<h3 v-if="graph.hasReleases" class="graph-group" :style="{ top: '40px' }">
+							<h3
+								v-if="graph.hasReleases"
+								class="graph-group"
+								:style="{ top: `${metrics.firstLabelTop}px` }"
+							>
 								Packages with a newer release
 							</h3>
 							<h3 class="graph-group" :style="{ top: `${graph.queueLabelTop}px` }">
@@ -337,17 +371,22 @@ const laneColor = (index: number): string => {
 									@focus="hovered = row.repo"
 									@blur="hovered = null"
 								/>
-								<span class="row-position">{{ row.position }}</span>
+								<span v-if="!narrow" class="row-position">{{ row.position }}</span>
 								<span class="row-name">
-									<a
-										:href="repoUrl(row.repo)"
-										:style="
-											row.lane !== null && laneColored(row.lane)
-												? { color: laneColor(row.lane) }
-												: undefined
-										"
-										>{{ row.repo }}</a
-									>
+									<span class="row-title">
+										<span v-if="narrow && row.position !== null" class="row-number">{{
+											row.position
+										}}</span>
+										<a
+											:href="repoUrl(row.repo)"
+											:style="
+												row.lane !== null && laneColored(row.lane)
+													? { color: laneColor(row.lane) }
+													: undefined
+											"
+											>{{ row.repo }}</a
+										>
+									</span>
 									<span class="row-packages" :title="row.packages">{{
 										row.packages
 									}}</span>
@@ -355,42 +394,77 @@ const laneColor = (index: number): string => {
 								<span
 									v-if="row.latest"
 									class="row-summary"
-									:style="{ left: `${behindLeft}px` }"
+									:style="
+										narrow
+											? { top: `${metrics.detailsTop}px` }
+											: { left: `${behindLeft}px` }
+									"
 								>
 									Latest <span class="mono">{{ row.latest }}</span
-									>, {{ row.behindCount }}
+									>,<br v-if="narrow" />
+									{{ row.behindCount }}
 									{{ row.behindCount === 1 ? 'repository' : 'repositories' }} behind
 								</span>
 								<template
 									v-for="detail in row.details"
 									:key="`${detail.name} ${detail.path} ${detail.section}`"
 								>
-									<span
-										class="row-behind"
-										:class="[`is-${detail.status}`, `behind-${detail.behind}`]"
-										:style="{ left: `${behindLeft}px`, top: `${detail.y}px` }"
-										:title="STATUS[detail.status].label"
-									>
-										<span class="mark" aria-hidden="true">{{
-											STATUS[detail.status].mark
-										}}</span>
-										{{ detail.behind }}
-									</span>
-									<span
-										class="row-update"
-										:style="{ left: `${updateLeft}px`, top: `${detail.y}px` }"
-									>
-										<a
-											:href="fileUrl(detail.consumer, detail.path)"
-											:title="`${detail.name} in ${detail.path}`"
-											:style="{ color: laneColor(detail.lane) }"
-											>{{ graph.lanes[detail.lane].label }}</a
+									<!-- Stacked: what is behind and in which package, then the versions. -->
+									<template v-if="narrow">
+										<span
+											class="row-behind"
+											:class="[`is-${detail.status}`, `behind-${detail.behind}`]"
+											:style="{ top: `${detail.y}px` }"
+											:title="STATUS[detail.status].label"
 										>
-										<span class="mono"
-											>{{ detail.installed ?? '—' }} → {{ detail.latest ?? '?' }}</span
+											<span class="mark" aria-hidden="true">{{
+												STATUS[detail.status].mark
+											}}</span>
+											{{ detail.behind }}
+											<a
+												:href="fileUrl(detail.consumer, detail.path)"
+												:title="`${detail.name} in ${detail.path}`"
+												:style="{ color: laneColor(detail.lane) }"
+												>{{ graph.lanes[detail.lane].label }}</a
+											>
+										</span>
+										<span class="row-update" :style="{ top: `${detail.y + 18}px` }">
+											<span class="mono"
+												>{{ detail.installed ?? '—' }} →
+												{{ detail.latest ?? '?' }}</span
+											>
+											<span v-if="isDev(detail)" class="dev">dev</span>
+										</span>
+									</template>
+									<template v-else>
+										<span
+											class="row-behind"
+											:class="[`is-${detail.status}`, `behind-${detail.behind}`]"
+											:style="{ left: `${behindLeft}px`, top: `${detail.y}px` }"
+											:title="STATUS[detail.status].label"
 										>
-										<span v-if="isDev(detail)" class="dev">dev</span>
-									</span>
+											<span class="mark" aria-hidden="true">{{
+												STATUS[detail.status].mark
+											}}</span>
+											{{ detail.behind }}
+										</span>
+										<span
+											class="row-update"
+											:style="{ left: `${updateLeft}px`, top: `${detail.y}px` }"
+										>
+											<a
+												:href="fileUrl(detail.consumer, detail.path)"
+												:title="`${detail.name} in ${detail.path}`"
+												:style="{ color: laneColor(detail.lane) }"
+												>{{ graph.lanes[detail.lane].label }}</a
+											>
+											<span class="mono"
+												>{{ detail.installed ?? '—' }} →
+												{{ detail.latest ?? '?' }}</span
+											>
+											<span v-if="isDev(detail)" class="dev">dev</span>
+										</span>
+									</template>
 								</template>
 							</div>
 
@@ -399,7 +473,7 @@ const laneColor = (index: number): string => {
 								:width="graph.width"
 								:height="graph.height"
 								:viewBox="`0 0 ${graph.width} ${graph.height}`"
-								:style="{ left: `${GRAPH_LEFT}px` }"
+								:style="{ left: `${graphLeft}px` }"
 								aria-hidden="true"
 							>
 								<g
@@ -438,14 +512,15 @@ const laneColor = (index: number): string => {
 										class="graph-node"
 										:cx="row.nodeX"
 										:cy="row.y"
-										r="7"
+										:r="metrics.nodeRadius"
 										:style="{
 											fill:
 												row.lane !== null ? laneColor(row.lane) : 'var(--vp-c-text-2)',
 										}"
 									/>
+									<!-- Stacked, the name beside the node is in the lane's colour instead. -->
 									<text
-										v-if="row.lane !== null"
+										v-if="row.lane !== null && !narrow"
 										class="graph-label"
 										:x="row.nodeX + 12"
 										:y="row.y + 4"
@@ -1211,11 +1286,24 @@ thead th {
 
 	a {
 		display: block;
+		min-width: 0;
 		overflow: hidden;
 		font-weight: 600;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
+}
+
+/* The name, and stacked the place in the queue before it. */
+.row-title {
+	display: flex;
+	gap: 6px;
+	align-items: baseline;
+}
+
+.row-number {
+	color: var(--vp-c-text-2);
+	font-variant-numeric: tabular-nums;
 }
 
 .row-packages {
@@ -1326,6 +1414,44 @@ thead th {
 	stroke: var(--row-bg);
 	stroke-linejoin: round;
 	stroke-width: 5px;
+}
+
+/*
+ * Stacked, for phones: all text starts right of the lanes and keeps to the width
+ * of the screen. Every line is 18 high and never wraps, so that the heights the
+ * layout gave the rows hold; what does not fit is cut off.
+ */
+.narrow .graph-group {
+	left: var(--text-left);
+	right: 0;
+	line-height: 18px;
+}
+
+.narrow .row-name {
+	left: var(--text-left);
+	right: 0;
+	width: auto;
+}
+
+.narrow :is(.row-summary, .row-behind, .row-update) {
+	left: var(--text-left);
+	right: 0;
+	overflow: hidden;
+	line-height: 18px;
+	text-overflow: ellipsis;
+}
+
+.narrow .row-behind a {
+	margin-left: 6px;
+	font-weight: 600;
+}
+
+.narrow .lane-halo {
+	stroke-width: 7;
+}
+
+.narrow .lane-line:not(.dotted) {
+	stroke-width: 2.5;
 }
 
 /* Packages --------------------------------------------------------------- */
