@@ -606,25 +606,17 @@
 			"from": "tools",
 			"to": "node-release-tool",
 			"kind": "npm",
-			"detail": "@versatiles/release-tool@^2.20.0",
+			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
-			"line": 44
-		},
-		{
-			"from": "tools",
-			"to": "node-versatiles-container",
-			"kind": "npm",
-			"detail": "@versatiles/container@^2.0.2",
-			"path": "package.json",
-			"line": 43
+			"line": 42
 		},
 		{
 			"from": "tools",
 			"to": "node-versatiles-svelte",
 			"kind": "npm",
-			"detail": "@versatiles/svelte@^3.0.1",
+			"detail": "@versatiles/svelte@^3.0.3",
 			"path": "package.json",
-			"line": 45
+			"line": 43
 		},
 		{
 			"from": "tools",
@@ -632,7 +624,7 @@
 			"kind": "download",
 			"detail": "github.com/versatiles-org/versatiles-frontend/releases",
 			"path": "src/routes/setup_server/generate_code.ts",
-			"line": 260
+			"line": 283
 		},
 		{
 			"from": "tools",
@@ -640,7 +632,7 @@
 			"kind": "download",
 			"detail": "github.com/versatiles-org/versatiles-rs/releases",
 			"path": "src/routes/setup_server/generate_code.ts",
-			"line": 171
+			"line": 194
 		},
 		{
 			"from": "versatiles-choro",
