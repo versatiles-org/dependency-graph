@@ -928,7 +928,7 @@
 			"kind": "dispatch",
 			"detail": "gh workflow run --repo versatiles-org/homebrew-versatiles",
 			"path": ".github/workflows/release.yml",
-			"line": 1156
+			"line": 1174
 		},
 		{
 			"from": "versatiles-rs",
@@ -936,7 +936,7 @@
 			"kind": "dispatch",
 			"detail": "gh workflow run --repo versatiles-org/versatiles-docker",
 			"path": ".github/workflows/release.yml",
-			"line": 1146
+			"line": 1164
 		},
 		{
 			"from": "versatiles-studio",

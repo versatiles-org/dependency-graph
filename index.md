@@ -257,8 +257,8 @@ A workflow starts a build in another repository. The table lists who starts whom
 | versatiles-org.github.io | playground          | `gh workflow run --repo versatiles-org/playground`          | [.github/workflows/gh-release.yml](https://github.com/versatiles-org/versatiles-org.github.io/blob/main/.github/workflows/gh-release.yml#L145) |
 | versatiles-org.github.io | showcases           | `gh workflow run --repo versatiles-org/showcases`           | [.github/workflows/gh-release.yml](https://github.com/versatiles-org/versatiles-org.github.io/blob/main/.github/workflows/gh-release.yml#L165) |
 | versatiles-org.github.io | tools               | `gh workflow run --repo versatiles-org/tools`               | [.github/workflows/gh-release.yml](https://github.com/versatiles-org/versatiles-org.github.io/blob/main/.github/workflows/gh-release.yml#L125) |
-| versatiles-rs            | homebrew-versatiles | `gh workflow run --repo versatiles-org/homebrew-versatiles` | [.github/workflows/release.yml](https://github.com/versatiles-org/versatiles-rs/blob/main/.github/workflows/release.yml#L1156)                 |
-| versatiles-rs            | versatiles-docker   | `gh workflow run --repo versatiles-org/versatiles-docker`   | [.github/workflows/release.yml](https://github.com/versatiles-org/versatiles-rs/blob/main/.github/workflows/release.yml#L1146)                 |
+| versatiles-rs            | homebrew-versatiles | `gh workflow run --repo versatiles-org/homebrew-versatiles` | [.github/workflows/release.yml](https://github.com/versatiles-org/versatiles-rs/blob/main/.github/workflows/release.yml#L1174)                 |
+| versatiles-rs            | versatiles-docker   | `gh workflow run --repo versatiles-org/versatiles-docker`   | [.github/workflows/release.yml](https://github.com/versatiles-org/versatiles-rs/blob/main/.github/workflows/release.yml#L1164)                 |
 | versatiles-studio        | homebrew-versatiles | `gh workflow run --repo versatiles-org/homebrew-versatiles` | [.github/workflows/release.yml](https://github.com/versatiles-org/versatiles-studio/blob/main/.github/workflows/release.yml#L465)              |
 
 :::
