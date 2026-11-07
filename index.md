@@ -89,7 +89,7 @@ What surrounds the software — documentation and specifications, the websites, 
 | [download.versatiles.org](https://github.com/versatiles-org/download.versatiles.org)   | Data download hub for VersaTiles datasets.                                                    | 3          | 0       |
 | [homebrew-versatiles](https://github.com/versatiles-org/homebrew-versatiles)           | Homebrew tap for installing VersaTiles CLI tools on macOS.                                    | 3          | 0       |
 | [photon-stack](https://github.com/versatiles-org/photon-stack)                         | Docker deployment of the Photon geocoder behind geocode.versatiles.org.                       | 0          | 3       |
-| [playground](https://github.com/versatiles-org/playground)                             | Interactive playground demonstrating how to use VersaTiles in web applications.               | 2          | 0       |
+| [playground](https://github.com/versatiles-org/playground)                             | Interactive playground demonstrating how to use VersaTiles in web applications.               | 3          | 0       |
 | [shortbread-docs](https://github.com/versatiles-org/shortbread-docs)                   | Documentation of the Shortbread vector tile schema                                            | 0          | 0       |
 | [showcases](https://github.com/versatiles-org/showcases)                               | Gallery of projects using VersaTiles                                                          | 1          | 0       |
 | [tiles.versatiles.org](https://github.com/versatiles-org/tiles.versatiles.org)         | Tile hosting service for public VersaTiles datasets.                                          | 3          | 0       |
@@ -106,7 +106,7 @@ Housekeeping for the maintainers. Nothing here is needed to use VersaTiles.
 | Repository                                                               | Description                                                                                   | Depends on | Used by |
 | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- | ---------- | ------- |
 | [dependency-graph](https://github.com/versatiles-org/dependency-graph)   | How the VersaTiles repositories depend on each other, and which dependencies are out of date. | 0          | 0       |
-| [node-release-tool](https://github.com/versatiles-org/node-release-tool) | Helper tool for automating Node.js package releases across VersaTiles repositories.           | 0          | 16      |
+| [node-release-tool](https://github.com/versatiles-org/node-release-tool) | Helper tool for automating Node.js package releases across VersaTiles repositories.           | 0          | 17      |
 
 ## How each link is declared
 
@@ -118,7 +118,7 @@ listed below, and can be followed back to it.
 
 The repository lists a `@versatiles/…` package among its npm dependencies.
 
-::: details Where these 38 links come from
+::: details Where these 39 links come from
 
 | From                         | To                         | Found                                    | Source                                                                                                    |
 | ---------------------------- | -------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -142,6 +142,7 @@ The repository lists a `@versatiles/…` package among its npm dependencies.
 | node-versatiles-svelte       | versatiles-style           | `@versatiles/style@^8.1.1`               | [package.json](https://github.com/versatiles-org/node-versatiles-svelte/blob/main/package.json#L84)       |
 | orthophotos                  | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/orthophotos/blob/main/package.json#L37)                  |
 | orthophotos                  | versatiles-style           | `@versatiles/style@^7.1.0`               | [package.json](https://github.com/versatiles-org/orthophotos/blob/main/package.json#L38)                  |
+| playground                   | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/playground/blob/main/package.json#L46)                   |
 | tools                        | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/tools/blob/main/package.json#L42)                        |
 | tools                        | node-versatiles-svelte     | `@versatiles/svelte@^3.0.3`              | [package.json](https://github.com/versatiles-org/tools/blob/main/package.json#L43)                        |
 | versatiles-choro             | versatiles-rs              | `@versatiles/versatiles-rs@^4.15.0`      | [package.json](https://github.com/versatiles-org/versatiles-choro/blob/main/package.json#L46)             |

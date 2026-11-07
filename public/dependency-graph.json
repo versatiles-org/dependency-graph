@@ -580,6 +580,14 @@
 		},
 		{
 			"from": "playground",
+			"to": "node-release-tool",
+			"kind": "npm",
+			"detail": "@versatiles/release-tool@^2.21.0",
+			"path": "package.json",
+			"line": 46
+		},
+		{
+			"from": "playground",
 			"to": "photon-stack",
 			"kind": "manual",
 			"detail": "the geocoder example queries geocode.versatiles.org, which this stack serves",
