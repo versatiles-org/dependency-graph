@@ -446,7 +446,7 @@
 			"from": "maplibre-versatiles-styler",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^8.1.1",
+			"detail": "@versatiles/style@^9.0.0",
 			"path": "package.json",
 			"line": 55
 		},
@@ -526,7 +526,7 @@
 			"from": "node-versatiles-svelte",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^8.1.1",
+			"detail": "@versatiles/style@^9.0.0",
 			"path": "package.json",
 			"line": 84
 		},
