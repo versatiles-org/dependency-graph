@@ -902,7 +902,7 @@
 			"from": "versatiles-org.github.io",
 			"to": "node-release-tool",
 			"kind": "npm",
-			"detail": "@versatiles/release-tool@^2.20.0",
+			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
 			"line": 26
 		},
