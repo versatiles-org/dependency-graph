@@ -147,20 +147,20 @@ The repository lists a `@versatiles/…` package among its npm dependencies.
 | tools                        | node-versatiles-svelte     | `@versatiles/svelte@^3.0.3`              | [package.json](https://github.com/versatiles-org/tools/blob/main/package.json#L43)                        |
 | versatiles-choro             | versatiles-rs              | `@versatiles/versatiles-rs@^4.15.0`      | [package.json](https://github.com/versatiles-org/versatiles-choro/blob/main/package.json#L46)             |
 | versatiles-choro             | versatiles-style           | `@versatiles/style@^6.1.1`               | [package.json](https://github.com/versatiles-org/versatiles-choro/blob/main/package.json#L67)             |
-| versatiles-frontend          | maplibre-versatiles-styler | `maplibre-versatiles-styler@^2.6.0`      | [package.json](https://github.com/versatiles-org/versatiles-frontend/blob/main/package.json#L63)          |
+| versatiles-frontend          | maplibre-versatiles-styler | `maplibre-versatiles-styler@^3.0.0`      | [package.json](https://github.com/versatiles-org/versatiles-frontend/blob/main/package.json#L63)          |
 | versatiles-frontend          | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/versatiles-frontend/blob/main/package.json#L51)          |
-| versatiles-frontend          | versatiles-style           | `@versatiles/style@^8.1.1`               | [package.json](https://github.com/versatiles-org/versatiles-frontend/blob/main/package.json#L52)          |
+| versatiles-frontend          | versatiles-style           | `@versatiles/style@^9.0.0`               | [package.json](https://github.com/versatiles-org/versatiles-frontend/blob/main/package.json#L52)          |
 | versatiles-frontend          | versatiles-svg-renderer    | `@versatiles/maplibre-svg-export@^2.5.0` | [package.json](https://github.com/versatiles-org/versatiles-frontend/blob/main/package.json#L50)          |
 | versatiles-map-animator      | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/versatiles-map-animator/blob/main/package.json#L43)      |
 | versatiles-map-animator      | versatiles-style           | `@versatiles/style@^8.1.1`               | [package.json](https://github.com/versatiles-org/versatiles-map-animator/blob/main/package.json#L44)      |
 | versatiles-map-editor        | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/versatiles-map-editor/blob/main/package.json#L61)        |
-| versatiles-map-editor        | versatiles-style           | `@versatiles/style@^8.1.1`               | [package.json](https://github.com/versatiles-org/versatiles-map-editor/blob/main/package.json#L50)        |
+| versatiles-map-editor        | versatiles-style           | `@versatiles/style@^9.0.0`               | [package.json](https://github.com/versatiles-org/versatiles-map-editor/blob/main/package.json#L50)        |
 | versatiles-org.github.io     | node-release-tool          | `@versatiles/release-tool@^2.20.0`       | [package.json](https://github.com/versatiles-org/versatiles-org.github.io/blob/main/package.json#L26)     |
 | versatiles-studio            | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/versatiles-studio/blob/main/package.json#L58)            |
 | versatiles-studio            | versatiles-style           | `@versatiles/style@^8.1.1`               | [package.json](https://github.com/versatiles-org/versatiles-studio/blob/main/package.json#L89)            |
 | versatiles-style             | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/versatiles-style/blob/main/package.json#L113)            |
 | versatiles-svg-renderer      | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/versatiles-svg-renderer/blob/main/package.json#L60)      |
-| versatiles-svg-renderer      | versatiles-style           | `@versatiles/style@^8.1.1`               | [package.json](https://github.com/versatiles-org/versatiles-svg-renderer/blob/main/package.json#L61)      |
+| versatiles-svg-renderer      | versatiles-style           | `@versatiles/style@^9.0.0`               | [package.json](https://github.com/versatiles-org/versatiles-svg-renderer/blob/main/package.json#L61)      |
 
 :::
 
