@@ -440,7 +440,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
-			"line": 54
+			"line": 58
 		},
 		{
 			"from": "maplibre-versatiles-styler",
@@ -448,7 +448,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/style@^9.0.0",
 			"path": "package.json",
-			"line": 55
+			"line": 59
 		},
 		{
 			"from": "node-versatiles-container",
@@ -456,7 +456,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
-			"line": 68
+			"line": 78
 		},
 		{
 			"from": "node-versatiles-google-cloud",
@@ -464,7 +464,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
-			"line": 77
+			"line": 81
 		},
 		{
 			"from": "node-versatiles-google-cloud",
@@ -472,7 +472,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/container@^2.1.1",
 			"path": "package.json",
-			"line": 63
+			"line": 67
 		},
 		{
 			"from": "node-versatiles-google-cloud",
@@ -480,7 +480,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/style@^8.1.1",
 			"path": "package.json",
-			"line": 64
+			"line": 68
 		},
 		{
 			"from": "node-versatiles-server",
@@ -488,7 +488,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
-			"line": 72
+			"line": 76
 		},
 		{
 			"from": "node-versatiles-server",
@@ -496,7 +496,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/container@^2.1.1",
 			"path": "package.json",
-			"line": 64
+			"line": 68
 		},
 		{
 			"from": "node-versatiles-server",
@@ -512,7 +512,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/style@^8.1.1",
 			"path": "package.json",
-			"line": 65
+			"line": 69
 		},
 		{
 			"from": "node-versatiles-svelte",
@@ -520,7 +520,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
-			"line": 58
+			"line": 62
 		},
 		{
 			"from": "node-versatiles-svelte",
@@ -528,7 +528,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/style@^9.0.0",
 			"path": "package.json",
-			"line": 84
+			"line": 88
 		},
 		{
 			"from": "opendem-gebco-bathymetry",
@@ -638,7 +638,7 @@
 			"from": "tools",
 			"to": "node-versatiles-svelte",
 			"kind": "npm",
-			"detail": "@versatiles/svelte@^3.0.3",
+			"detail": "@versatiles/svelte@^4.0.0",
 			"path": "package.json",
 			"line": 43
 		},
@@ -912,7 +912,7 @@
 			"kind": "dispatch",
 			"detail": "gh workflow run --repo versatiles-org/playground",
 			"path": ".github/workflows/gh-release.yml",
-			"line": 145
+			"line": 148
 		},
 		{
 			"from": "versatiles-org.github.io",
@@ -920,7 +920,7 @@
 			"kind": "dispatch",
 			"detail": "gh workflow run --repo versatiles-org/showcases",
 			"path": ".github/workflows/gh-release.yml",
-			"line": 165
+			"line": 168
 		},
 		{
 			"from": "versatiles-org.github.io",
@@ -928,7 +928,7 @@
 			"kind": "dispatch",
 			"detail": "gh workflow run --repo versatiles-org/tools",
 			"path": ".github/workflows/gh-release.yml",
-			"line": 125
+			"line": 128
 		},
 		{
 			"from": "versatiles-rs",
@@ -1048,7 +1048,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
-			"line": 113
+			"line": 123
 		},
 		{
 			"from": "versatiles-svg-renderer",
