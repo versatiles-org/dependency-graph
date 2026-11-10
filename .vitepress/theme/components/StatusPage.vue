@@ -411,7 +411,7 @@ const laneColor = (index: number): string => {
 						</li>
 						<li>
 							<svg width="32" height="8" viewBox="0 0 32 8" aria-hidden="true">
-								<path d="M 0 4 L 32 4" class="graph-key-dash" />
+								<path d="M 3 4 L 30 4" class="graph-key-dev" />
 							</svg>
 							Development dependency
 						</li>
@@ -610,7 +610,7 @@ const laneColor = (index: number): string => {
 										:key="edge.consumer"
 										class="lane-line"
 										:class="{
-											dashed: edge.dashed,
+											dev: edge.dev,
 											dotted: edge.dotted,
 											faint: !edgeLit(edge),
 										}"
@@ -1367,11 +1367,13 @@ thead th {
 	}
 }
 
-.graph-key-dash {
+/* Four dots, as on a development line. */
+.graph-key-dev {
 	fill: none;
 	stroke: var(--vp-c-text-2);
+	stroke-linecap: round;
 	stroke-width: 3;
-	stroke-dasharray: 6 4;
+	stroke-dasharray: 0 5;
 }
 
 .graph-key-dots {
@@ -1570,8 +1572,13 @@ thead th {
 	stroke-linecap: round;
 	stroke-width: 3;
 
-	&.dashed {
-		stroke-dasharray: 6 4;
+	/*
+	 * Round dots as wide as a solid line, far apart: unlike dashes they cannot be
+	 * mistaken for a solid line, and unlike the thin, close dots below they still
+	 * carry the lane's weight.
+	 */
+	&.dev {
+		stroke-dasharray: 0 5;
 	}
 
 	&.dotted {

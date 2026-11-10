@@ -113,12 +113,21 @@ describe('buildQueueGraph', () => {
 		expect(graph.rows[1].details).toHaveLength(2);
 	});
 
-	it('dashes a line only when everything on it is a development dependency', () => {
+	it('marks a line as development only when everything on it is a development dependency', () => {
 		const dev = { section: 'devDependencies' };
 		const lines = (...usages: OutdatedUsage[]) =>
-			buildQueueGraph([entry(1, 'a', ...usages)], {}).lanes[0].edges[0].dashed;
+			buildQueueGraph([entry(1, 'a', ...usages)], {}).lanes[0].edges[0].dev;
 		expect(lines(usage('a', 'p', dev))).toBe(true);
 		expect(lines(usage('a', 'p', dev), usage('a', 'p', { name: 'other' }))).toBe(false);
+	});
+
+	it('gives a development line no halo, which would fill the gaps between its dots', () => {
+		const [lane] = buildQueueGraph(
+			[entry(1, 'a', usage('a', 'p', { section: 'devDependencies' }))],
+			{},
+		).lanes;
+		expect(lane.edges[0].dev).toBe(true);
+		expect(lane.halo).not.toContain(lane.edges[0].line);
 	});
 
 	it('makes room for every usage in a row, and spreads them around its centre', () => {

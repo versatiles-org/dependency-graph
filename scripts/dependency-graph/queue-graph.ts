@@ -135,8 +135,8 @@ export interface GraphEdge {
 	consumer: string;
 	provider: string;
 	line: string;
-	/** Only development dependencies are behind. */
-	dashed: boolean;
+	/** Only development dependencies are behind. Drawn as widely spaced dots. */
+	dev: boolean;
 	/** Nothing is behind yet, but will be once the provider is released. */
 	dotted: boolean;
 }
@@ -291,7 +291,7 @@ export function buildQueueGraph(
 					consumer: entry.consumer,
 					provider: repo,
 					line: edgeLine(row.nodeX, x, row.y, own.y, m.curve),
-					dashed: usages.length > 0 && usages.every((usage) => isDev(usage)),
+					dev: usages.length > 0 && usages.every((usage) => isDev(usage)),
 					dotted: usages.length === 0,
 				},
 			];
@@ -327,7 +327,8 @@ export function buildQueueGraph(
 			line,
 			dottedLine: dotted.join(' '),
 			heads: heads.join(' '),
-			halo: [line, ...edges.filter((edge) => !edge.dotted).map((edge) => edge.line)]
+			// Only solid lines: under dots, a halo would fill the gaps between them.
+			halo: [line, ...edges.filter((edge) => !edge.dotted && !edge.dev).map((edge) => edge.line)]
 				.filter(Boolean)
 				.join(' '),
 			edges,
