@@ -27,3 +27,5 @@ npm run check          # format, lint, type-check, test and build
 `npm run check` deliberately doesn't compare the graph with GitHub, so a change in another repository can't fail it. To run that comparison by hand, use `npm run sync:deps -- --check`.
 
 A GitHub token is read from `GITHUB_TOKEN`, `GH_TOKEN` or `gh auth token`.
+
+Every run reads each repository as of its head commit, and keeps the files it reads in `.cache/github` under their git hashes. The next run fetches only what changed. Nothing there can go stale, and deleting it only makes one run slower.

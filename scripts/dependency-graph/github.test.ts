@@ -1,5 +1,16 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GitHub, isCacheFresh, mapLimit, type RepoInfo } from './github';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+	blobSha,
+	GitHub,
+	isCacheFresh,
+	mapLimit,
+	ObjectStore,
+	type Checkout,
+	type RepoInfo,
+} from './github';
 
 /** A token from the environment keeps the constructor away from the `gh` binary. */
 function client(): GitHub {
@@ -112,54 +123,255 @@ describe('listRepos', () => {
 	});
 });
 
-describe('listEntries', () => {
-	it('returns only blobs, and leaves out anything too big to be a manifest', async () => {
+const COMMIT = 'c'.repeat(40);
+
+/** What a tree listing says about a file with this content. */
+const blob = (path: string, text: string) => ({
+	path,
+	type: 'blob',
+	size: Buffer.byteLength(text),
+	sha: blobSha(text),
+});
+
+/** A checkout that knows nothing about its files, so that every read asks GitHub. */
+const unlisted = (name: string, ref = 'main'): Checkout => ({
+	repo: name,
+	ref,
+	files: new Map(),
+	complete: false,
+	entries: [],
+});
+
+describe('blobSha', () => {
+	it('hashes a file the way git does', () => {
+		// `printf 'hello\n' | git hash-object --stdin`
+		expect(blobSha('hello\n')).toBe('ce013625030ba8dba906f756967f9e9ca394464a');
+		expect(blobSha('')).toBe('e69de29bb2d1d6434b8b29ae775ad8c2e48c5391');
+	});
+});
+
+describe('heads', () => {
+	it('finds the head commit of every repository, page by page', async () => {
+		const page = (names: string[], next: string | null) =>
+			reply({
+				data: {
+					organization: {
+						repositories: {
+							pageInfo: { hasNextPage: next !== null, endCursor: next },
+							nodes: names.map((name) =>
+								name === 'empty'
+									? { name, defaultBranchRef: null }
+									: { name, defaultBranchRef: { target: { oid: `${name}-head` } } },
+							),
+						},
+					},
+				},
+			});
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(page(['a', 'empty'], 'cursor-1'))
+			.mockResolvedValueOnce(page(['b'], null));
+		vi.stubGlobal('fetch', fetchMock);
+
+		const heads = await client().heads('versatiles-org');
+		expect([...heads]).toEqual([
+			['a', 'a-head'],
+			['b', 'b-head'],
+		]);
+		const second = JSON.parse(
+			(fetchMock.mock.calls[1] as [string, { body: string }])[1].body,
+		) as {
+			variables: { after: string };
+		};
+		expect(second.variables.after).toBe('cursor-1');
+	});
+
+	it('fails rather than pretend an unknown organisation has no repositories', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({ data: { organization: null } })));
+		await expect(client().heads('nobody')).rejects.toThrow(/no organisation/);
+	});
+});
+
+describe('checkout', () => {
+	it('lists only blobs, and offers only those small enough to be a manifest', async () => {
 		vi.stubGlobal(
 			'fetch',
 			vi.fn().mockResolvedValue(
 				reply({
 					tree: [
-						{ path: 'package.json', type: 'blob', size: 400 },
-						{ path: 'src', type: 'tree' },
-						{ path: 'data/planet.pmtiles', type: 'blob', size: 900 * 1024 },
-						{ path: 'no-size', type: 'blob' },
+						{ path: 'package.json', type: 'blob', size: 400, sha: 'a'.repeat(40) },
+						{ path: 'src', type: 'tree', sha: 'b'.repeat(40) },
+						{
+							path: 'data/planet.pmtiles',
+							type: 'blob',
+							size: 900 * 1024,
+							sha: 'd'.repeat(40),
+						},
+						{ path: 'no-size', type: 'blob', sha: 'e'.repeat(40) },
 					],
 				}),
 			),
 		);
-		const entries = await client().listEntries('versatiles-org', repo('versatiles-rs'));
-		expect(entries.map((entry) => entry.path)).toEqual(['package.json', 'no-size']);
+		const checkout = await client().checkout('versatiles-org', repo('versatiles-rs'), COMMIT);
+		expect(checkout.entries.map((entry) => entry.path)).toEqual(['package.json', 'no-size']);
+		// A lockfile can be bigger than a manifest and still be read.
+		expect([...checkout.files.keys()]).toEqual([
+			'package.json',
+			'data/planet.pmtiles',
+			'no-size',
+		]);
 	});
 
-	it('says so when GitHub truncates the listing', async () => {
+	it('names the commit when it is known, and the branch when not', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(reply({ tree: [] }));
+		vi.stubGlobal('fetch', fetchMock);
+		const github = client();
+
+		expect((await github.checkout('versatiles-org', repo('x'), COMMIT)).ref).toBe(COMMIT);
+		expect(String(fetchMock.mock.calls[0][0])).toContain(`/git/trees/${COMMIT}?recursive=1`);
+		expect((await github.checkout('versatiles-org', repo('x'), null)).ref).toBe('main');
+		expect(String(fetchMock.mock.calls[1][0])).toContain('/git/trees/main?recursive=1');
+	});
+
+	it('says so when GitHub truncates the listing, and trusts it less', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({ truncated: true, tree: [] })));
-		await client().listEntries('versatiles-org', repo('huge'));
+		const checkout = await client().checkout('versatiles-org', repo('huge'), COMMIT);
 		expect(warn.mock.calls.flat().join(' ')).toContain('truncated');
+		expect(checkout.complete).toBe(false);
 		warn.mockRestore();
 	});
 
 	it('treats a repository with no tree as empty rather than failing', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({}, 404)));
-		expect(await client().listEntries('versatiles-org', repo('empty'))).toEqual([]);
+		const checkout = await client().checkout('versatiles-org', repo('empty'), null);
+		expect(checkout.entries).toEqual([]);
+		expect(checkout.files.size).toBe(0);
 	});
 });
 
 describe('readFile', () => {
-	it('reads from raw.githubusercontent, which the API rate limit does not cover', async () => {
+	it('reads from raw.githubusercontent at the commit, which the API rate limit does not cover', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(reply('name = "versatiles"'));
 		vi.stubGlobal('fetch', fetchMock);
 
-		const text = await client().readFile('versatiles-org', repo('versatiles-rs'), 'Cargo.toml');
+		const text = await client().readFile(
+			'versatiles-org',
+			unlisted('versatiles-rs', COMMIT),
+			'Cargo.toml',
+		);
 		expect(text).toBe('name = "versatiles"');
 		expect(String(fetchMock.mock.calls[0][0])).toBe(
-			'https://raw.githubusercontent.com/versatiles-org/versatiles-rs/main/Cargo.toml',
+			`https://raw.githubusercontent.com/versatiles-org/versatiles-rs/${COMMIT}/Cargo.toml`,
 		);
 	});
 
 	it('returns nothing for a file that is not there', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply('', 404)));
-		expect(await client().readFile('versatiles-org', repo('x'), 'gone.json')).toBe(null);
+		expect(await client().readFile('versatiles-org', unlisted('x'), 'gone.json')).toBe(null);
+	});
+
+	it('does not ask for a file that a complete listing does not have', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const checkout: Checkout = { ...unlisted('x', COMMIT), complete: true };
+		expect(await client().readFile('versatiles-org', checkout, 'gone.json')).toBe(null);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+});
+
+describe('the object store', () => {
+	let dir: string;
+	beforeEach(() => {
+		dir = mkdtempSync(join(tmpdir(), 'dependency-graph-'));
+	});
+	afterEach(() => {
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	const stored = (): GitHub => {
+		vi.stubEnv('GITHUB_TOKEN', 'test-token');
+		return new GitHub({ cache: false, store: dir });
+	};
+
+	it('reads an unchanged repository again without a single request', async () => {
+		const manifest = '{"name":"x"}\n';
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(reply({ tree: [blob('package.json', manifest)] }))
+			.mockResolvedValueOnce(reply(manifest));
+		vi.stubGlobal('fetch', fetchMock);
+
+		const first = stored();
+		const checkout = await first.checkout('versatiles-org', repo('x'), COMMIT);
+		expect(await first.readFile('versatiles-org', checkout, 'package.json')).toBe(manifest);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+
+		const second = stored();
+		const again = await second.checkout('versatiles-org', repo('x'), COMMIT);
+		expect(await second.readFile('versatiles-org', again, 'package.json')).toBe(manifest);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(second.storedCount).toBe(2);
+		expect(second.requestCount).toBe(0);
+	});
+
+	it('reuses a file that a new commit left alone', async () => {
+		const manifest = '{"name":"x"}\n';
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(reply({ tree: [blob('package.json', manifest)] }))
+			.mockResolvedValueOnce(reply(manifest))
+			.mockResolvedValueOnce(
+				reply({ tree: [blob('package.json', manifest), blob('README.md', 'new')] }),
+			);
+		vi.stubGlobal('fetch', fetchMock);
+
+		const github = stored();
+		const old = await github.checkout('versatiles-org', repo('x'), COMMIT);
+		await github.readFile('versatiles-org', old, 'package.json');
+		const next = await github.checkout('versatiles-org', repo('x'), 'f'.repeat(40));
+		expect(await github.readFile('versatiles-org', next, 'package.json')).toBe(manifest);
+		expect(fetchMock).toHaveBeenCalledTimes(3);
+	});
+
+	it('fetches a stored file again when it no longer matches its hash', async () => {
+		const manifest = '{"name":"x"}\n';
+		const sha = blobSha(manifest);
+		mkdirSync(join(dir, 'blobs'), { recursive: true });
+		writeFileSync(join(dir, 'blobs', sha), '{"name":"damaged"}\n');
+		const fetchMock = vi.fn().mockResolvedValue(reply(manifest));
+		vi.stubGlobal('fetch', fetchMock);
+
+		const checkout: Checkout = {
+			...unlisted('x', COMMIT),
+			files: new Map([['package.json', { path: 'package.json', size: 13, sha }]]),
+			complete: true,
+		};
+		expect(await stored().readFile('versatiles-org', checkout, 'package.json')).toBe(manifest);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(readFileSync(join(dir, 'blobs', sha), 'utf8')).toBe(manifest);
+	});
+
+	it('stores neither a listing named by a branch nor a truncated one', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+		const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(reply({ tree: [] })));
+		vi.stubGlobal('fetch', fetchMock);
+		const github = stored();
+		await github.checkout('versatiles-org', repo('x'), null);
+		await github.checkout('versatiles-org', repo('x'), null);
+		fetchMock.mockImplementation(() => Promise.resolve(reply({ truncated: true, tree: [] })));
+		await github.checkout('versatiles-org', repo('x'), COMMIT);
+		await github.checkout('versatiles-org', repo('x'), COMMIT);
+		expect(fetchMock).toHaveBeenCalledTimes(4);
+		warn.mockRestore();
+	});
+
+	it('never stores what does not match its hash', () => {
+		const store = new ObjectStore(dir);
+		store.writeBlob(blobSha('right'), 'wrong');
+		expect(store.readBlob(blobSha('right'))).toBeNull();
+		store.writeBlob('../escape', 'text');
+		expect(store.readBlob('../escape')).toBeNull();
 	});
 });
 
@@ -172,7 +384,7 @@ describe('when GitHub misbehaves', () => {
 		vi.stubGlobal('fetch', fetchMock);
 
 		const github = client();
-		expect(await github.readFile('versatiles-org', repo('x'), 'a.txt')).toBe('recovered');
+		expect(await github.readFile('versatiles-org', unlisted('x'), 'a.txt')).toBe('recovered');
 		expect(github.requestCount).toBe(2);
 	});
 
@@ -180,13 +392,15 @@ describe('when GitHub misbehaves', () => {
 		const fetchMock = vi.fn().mockResolvedValue(reply('', 401));
 		vi.stubGlobal('fetch', fetchMock);
 
-		await expect(client().readFile('versatiles-org', repo('x'), 'a.txt')).rejects.toThrow(/401/);
+		await expect(client().readFile('versatiles-org', unlisted('x'), 'a.txt')).rejects.toThrow(
+			/401/,
+		);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
 	it('names the URL it failed on', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply('', 400)));
-		await expect(client().readFile('versatiles-org', repo('x'), 'a.txt')).rejects.toThrow(
+		await expect(client().readFile('versatiles-org', unlisted('x'), 'a.txt')).rejects.toThrow(
 			/raw\.githubusercontent\.com/,
 		);
 	});

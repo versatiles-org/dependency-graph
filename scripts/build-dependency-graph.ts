@@ -15,18 +15,21 @@
  *
  *   npm run sync:deps              # regenerate the page and the status snapshot
  *   npm run sync:deps -- --check   # fail if the page is out of date
- *   npm run sync:deps -- --cache   # reuse responses from the last 24 hours
+ *   npm run sync:deps -- --cache   # also reuse releases and registry answers from the last 24 hours
  *   npm run sync:deps -- --drift   # report outdated versions instead (not committed)
  *   npm run sync:deps -- --drift --outdated   # … leaving out packages that are current
  *
  * A GitHub token is read from GITHUB_TOKEN, GH_TOKEN or `gh auth token`.
+ *
+ * Every run keeps the files it reads in STORE, under their git hashes, and
+ * reads only what changed since. Deleting the folder costs one slower run.
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import * as prettier from 'prettier';
 import { loadConfig, validateConfig, CONFIG_PATH } from './dependency-graph/config';
-import { GitHub, mapLimit, type RepoInfo } from './dependency-graph/github';
+import { GitHub, mapLimit, type Checkout, type RepoInfo } from './dependency-graph/github';
 import { buildNameMaps, classify, collectEdges, type RepoFile } from './dependency-graph/collect';
 import {
 	collectBundles,
@@ -46,6 +49,7 @@ const ROOT = resolve(__dirname, '..');
 const TARGET_PAGE = 'index.md';
 const TARGET_DATA = 'public/dependency-graph.json';
 const TARGET_STATUS = 'public/status.json';
+const STORE = '.cache/github';
 
 /** Repositories the configuration says nothing about still have to go somewhere. */
 const FALLBACK_TAG = {
@@ -82,10 +86,11 @@ async function readRepo(
 	github: GitHub,
 	org: string,
 	repo: RepoInfo,
+	commit: string | null,
 	progress: Progress,
-): Promise<RepoFile[]> {
-	const entries = await github.listEntries(org, repo);
-	const wanted = entries
+): Promise<{ checkout: Checkout; files: RepoFile[] }> {
+	const checkout = await github.checkout(org, repo, commit);
+	const wanted = checkout.entries
 		.map((entry) => ({ path: entry.path, role: classify(entry.path) }))
 		.filter((entry): entry is { path: string; role: NonNullable<typeof entry.role> } =>
 			Boolean(entry.role),
@@ -94,17 +99,34 @@ async function readRepo(
 	progress.add('files', wanted.length);
 	const files = await mapLimit(wanted, ({ path, role }) =>
 		progress.track('files', async () => {
-			const text = await github.readFile(org, repo, path);
+			const text = await github.readFile(org, checkout, path);
 			return text === null ? null : { repo: repo.name, path, role, text };
 		}),
 	);
-	return files.filter((file): file is RepoFile => file !== null);
+	return { checkout, files: files.filter((file): file is RepoFile => file !== null) };
+}
+
+/**
+ * Without the head commits every read names the branch instead, as before:
+ * slower, and open to a push during the run, but still correct.
+ */
+async function findHeads(github: GitHub, org: string): Promise<Map<string, string>> {
+	try {
+		return await github.heads(org);
+	} catch (error) {
+		console.warn(
+			`[dependency-graph] could not find the head commits, so reading branches instead: ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		);
+		return new Map();
+	}
 }
 
 async function main(): Promise<void> {
 	const { check, cache, drift, outdated } = parseArgs(process.argv.slice(2));
 	const config = loadConfig(ROOT);
-	const github = new GitHub({ cache });
+	const github = new GitHub({ cache, store: resolve(ROOT, STORE) });
 
 	const allRepos = await github.listRepos(config.org);
 	const problems = validateConfig(config, new Set(allRepos.map((repo) => repo.name)));
@@ -131,16 +153,20 @@ async function main(): Promise<void> {
 	});
 
 	console.log(`[dependency-graph] reading ${repos.length} repositories of ${config.org} …`);
+	const heads = await findHeads(github, config.org);
 	const scan = new Progress('scanning');
 	scan.add('repositories', repos.length);
-	const files = (
-		await mapLimit(repos, (repo) =>
-			scan.track('repositories', () => readRepo(github, config.org, repo, scan)),
-		)
-	).flat();
+	const scanned = await mapLimit(repos, (repo) =>
+		scan.track('repositories', () =>
+			readRepo(github, config.org, repo, heads.get(repo.name) ?? null, scan),
+		),
+	);
 	scan.finish();
+	const files = scanned.flatMap((result) => result.files);
+	const checkouts = new Map(scanned.map(({ checkout }) => [checkout.repo, checkout]));
 	console.log(
-		`[dependency-graph] scanned ${files.length} files in ${github.requestCount} requests`,
+		`[dependency-graph] scanned ${files.length} files in ${github.requestCount} requests` +
+			` (${github.storedCount} more from ${STORE})`,
 	);
 
 	const { maps, warnings: mapWarnings } = buildNameMaps(files);
@@ -152,11 +178,11 @@ async function main(): Promise<void> {
 					'                  different runs, so versions can disagree with each other.',
 			);
 		}
-		const byName = new Map(repos.map((repo) => [repo.name, repo]));
 		const lookup = new Progress('checking versions');
 		const source = {
+			// The same commit as the scan, so that manifests and lockfiles agree.
 			readFile: (repo: string, path: string) =>
-				github.readFile(config.org, byName.get(repo)!, path),
+				github.readFile(config.org, checkouts.get(repo)!, path),
 			getRegistryJson: (url: string) => github.getRegistryJson(url),
 			latestRelease: async (repo: string) => {
 				const release = await github.latestRelease(config.org, repo);

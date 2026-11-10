@@ -5,15 +5,22 @@
  * from local clones, so it describes what is actually published — not what
  * happens to be checked out on somebody's laptop.
  *
- * One request per repository lists its files (`/repos/…/git/trees`); the
- * handful of files that can carry a dependency are then read from
- * raw.githubusercontent.com, which does not count against the API rate limit.
+ * One GraphQL request finds the head commit of every repository, and every read
+ * after that names the commit rather than the branch, so that a push during a
+ * run cannot mix two states of one repository. One request per repository lists
+ * its files (`/repos/…/git/trees`); the handful of files that can carry a
+ * dependency are then read from raw.githubusercontent.com, which does not count
+ * against the API rate limit.
+ *
+ * Listings and files are kept in an object store under their git hashes. A hash
+ * names one content forever, so the store never goes stale, and a repository
+ * that has not changed since the last run costs no request at all.
  */
 
 import { execFileSync } from 'child_process';
 import { createHash } from 'crypto';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs';
-import { resolve } from 'path';
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'fs';
+import { dirname, resolve } from 'path';
 
 const API = 'https://api.github.com';
 const RAW = 'https://raw.githubusercontent.com';
@@ -59,6 +66,106 @@ export interface RepoInfo {
 export interface RepoEntry {
 	path: string;
 	size: number;
+}
+
+export interface TreeFile extends RepoEntry {
+	/** Git's hash of the file's content. */
+	sha: string;
+}
+
+/** A repository as of one commit, which every read from it names. */
+export interface Checkout {
+	repo: string;
+	/** The head commit, or the branch when the commit could not be found out. */
+	ref: string;
+	/** Every file in that state, by path. */
+	files: Map<string, TreeFile>;
+	/** False when GitHub cut the listing short, so a file missing from it may exist. */
+	complete: boolean;
+	/** The files small enough to be a manifest. */
+	entries: RepoEntry[];
+}
+
+const SHA = /^[0-9a-f]{40}$/;
+
+/** Git's name for a file's content, so that a stored copy can be checked against it. */
+export function blobSha(text: string): string {
+	const bytes = Buffer.from(text, 'utf8');
+	return createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+}
+
+/**
+ * Files by their blob hash and listings by their commit. Neither can change
+ * under its name, so nothing here expires. A file is checked against its hash
+ * when read back, so a damaged copy is fetched again rather than believed.
+ */
+export class ObjectStore {
+	constructor(private readonly dir: string) {}
+
+	private path(kind: 'blobs' | 'trees', sha: string): string | null {
+		return SHA.test(sha) ? resolve(this.dir, kind, sha) : null;
+	}
+
+	/** Written beside the target and renamed, so that an interrupted run leaves no half file. */
+	private write(path: string, content: string): void {
+		mkdirSync(dirname(path), { recursive: true });
+		const temporary = `${path}.${process.pid}.tmp`;
+		writeFileSync(temporary, content);
+		renameSync(temporary, path);
+	}
+
+	readBlob(sha: string): string | null {
+		const path = this.path('blobs', sha);
+		if (!path || !existsSync(path)) return null;
+		const text = readFileSync(path, 'utf8');
+		return blobSha(text) === sha ? text : null;
+	}
+
+	/**
+	 * Keeps only what matches its hash. A file that is not UTF-8, or that starts
+	 * with a byte order mark, is never stored, and is fetched again next time.
+	 */
+	writeBlob(sha: string, text: string): void {
+		const path = this.path('blobs', sha);
+		if (path && blobSha(text) === sha) this.write(path, text);
+	}
+
+	readTree(commit: string): TreeFile[] | null {
+		const path = this.path('trees', commit);
+		if (!path || !existsSync(path)) return null;
+		try {
+			const files = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+			return Array.isArray(files) ? (files as TreeFile[]) : null;
+		} catch {
+			return null;
+		}
+	}
+
+	writeTree(commit: string, files: TreeFile[]): void {
+		const path = this.path('trees', commit);
+		if (path) this.write(path, JSON.stringify(files));
+	}
+}
+
+const HEADS_QUERY = `query ($org: String!, $after: String) {
+  organization(login: $org) {
+    repositories(first: 100, after: $after, privacy: PUBLIC) {
+      pageInfo { hasNextPage endCursor }
+      nodes { name defaultBranchRef { target { oid } } }
+    }
+  }
+}`;
+
+interface HeadsAnswer {
+	organization: {
+		repositories: {
+			pageInfo: { hasNextPage: boolean; endCursor: string | null };
+			nodes: ({
+				name: string;
+				defaultBranchRef: { target: { oid: string } | null } | null;
+			} | null)[];
+		};
+	} | null;
 }
 
 /** Runs `worker` over `items`, at most CONCURRENCY at a time, preserving order. */
@@ -111,10 +218,13 @@ export class GitHub {
 	private readonly headers: Record<string, string>;
 	/** Set only with --cache: a developer convenience, never used by CI. */
 	private readonly cacheDir: string | null;
+	/** Safe for every run, CI included, because what it holds cannot go stale. */
+	private readonly store: ObjectStore | null;
 	private readonly gate = new Gate(CONCURRENCY);
 	private requests = 0;
+	private stored = 0;
 
-	constructor(options: { cache: boolean }) {
+	constructor(options: { cache: boolean; store?: string | null }) {
 		const token = resolveToken();
 		if (!token) {
 			console.warn(
@@ -130,10 +240,16 @@ export class GitHub {
 		this.cacheDir = options.cache
 			? resolve(__dirname, '../../node_modules/.cache/dependency-graph')
 			: null;
+		this.store = options.store ? new ObjectStore(options.store) : null;
 	}
 
 	get requestCount(): number {
 		return this.requests;
+	}
+
+	/** Listings and files taken from the object store instead of from GitHub. */
+	get storedCount(): number {
+		return this.stored;
 	}
 
 	private cachePath(url: string): string | null {
@@ -261,24 +377,82 @@ export class GitHub {
 		return repos.sort((a, b) => a.name.localeCompare(b.name));
 	}
 
-	/** Every blob on the repository's default branch, with its size. */
-	async listEntries(org: string, repo: RepoInfo): Promise<RepoEntry[]> {
-		const url = `${API}/repos/${org}/${repo.name}/git/trees/${repo.defaultBranch}?recursive=1`;
+	/**
+	 * The head commit of the default branch of each public repository. A
+	 * repository without commits has none, and is left out.
+	 */
+	async heads(org: string): Promise<Map<string, string>> {
+		const heads = new Map<string, string>();
+		let after: string | null = null;
+		do {
+			const answer: HeadsAnswer = await this.graphql<HeadsAnswer>(HEADS_QUERY, { org, after });
+			const repositories = answer.organization?.repositories;
+			if (!repositories) throw new Error(`GraphQL: no organisation ${org}`);
+			for (const node of repositories.nodes) {
+				const oid = node?.defaultBranchRef?.target?.oid;
+				if (node && oid) heads.set(node.name, oid);
+			}
+			after = repositories.pageInfo.hasNextPage ? repositories.pageInfo.endCursor : null;
+		} while (after);
+		return heads;
+	}
+
+	/**
+	 * Lists every file of a repository as of `commit`, or of its default branch
+	 * when the commit is not known. Only a listing named by its commit is stored,
+	 * and only a complete one.
+	 */
+	async checkout(org: string, repo: RepoInfo, commit: string | null): Promise<Checkout> {
+		const ref = commit ?? repo.defaultBranch;
+		const make = (files: TreeFile[], complete: boolean): Checkout => ({
+			repo: repo.name,
+			ref,
+			files: new Map(files.map((file) => [file.path, file])),
+			complete,
+			entries: files
+				.filter((file) => file.size <= MAX_BLOB_BYTES)
+				.map(({ path, size }) => ({ path, size })),
+		});
+
+		const stored = commit ? this.store?.readTree(commit) : null;
+		if (stored) {
+			this.stored++;
+			return make(stored, true);
+		}
+
+		const url = `${API}/repos/${org}/${repo.name}/git/trees/${ref}?recursive=1`;
 		const tree = await this.getJson<{
 			truncated?: boolean;
-			tree?: { path: string; type: string; size?: number }[];
+			tree?: { path: string; type: string; sha: string; size?: number }[];
 		}>(url);
-		if (!tree?.tree) return [];
+		if (!tree?.tree) return make([], true);
 		if (tree.truncated) {
 			console.warn(`[dependency-graph] ${repo.name}: file listing truncated by GitHub`);
 		}
-		return tree.tree
-			.filter((entry) => entry.type === 'blob' && (entry.size ?? 0) <= MAX_BLOB_BYTES)
-			.map((entry) => ({ path: entry.path, size: entry.size ?? 0 }));
+		const files = tree.tree
+			.filter((entry) => entry.type === 'blob')
+			.map((entry) => ({ path: entry.path, size: entry.size ?? 0, sha: entry.sha }));
+		if (commit && !tree.truncated) this.store?.writeTree(commit, files);
+		return make(files, !tree.truncated);
 	}
 
-	async readFile(org: string, repo: RepoInfo, path: string): Promise<string | null> {
-		return this.get(`${RAW}/${org}/${repo.name}/${repo.defaultBranch}/${path}`);
+	/**
+	 * A file as of the checkout's commit, or null if it has no such file. A
+	 * complete listing answers that without asking GitHub.
+	 */
+	async readFile(org: string, checkout: Checkout, path: string): Promise<string | null> {
+		const file = checkout.files.get(path);
+		if (!file && checkout.complete) return null;
+
+		const stored = file ? this.store?.readBlob(file.sha) : null;
+		if (stored != null) {
+			this.stored++;
+			return stored;
+		}
+
+		const text = await this.get(`${RAW}/${org}/${checkout.repo}/${checkout.ref}/${path}`);
+		if (text !== null && file) this.store?.writeBlob(file.sha, text);
+		return text;
 	}
 
 	/**

@@ -3,6 +3,7 @@
 .vitepress/cache
 .vitepress/dist
 public/status.json
+.cache
 node_modules
 coverage
 *_PLAN.md
