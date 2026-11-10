@@ -8,13 +8,11 @@
  * them into one diagram, so the shape of the project can be seen rather than
  * reconstructed.
  *
- * The generated files are committed. A build therefore needs no network access,
- * and a change somewhere in the organisation arrives as a reviewable diff
- * instead of a silent deploy. The status snapshot is the exception: it changes
- * with every release, so it is written for the deploy and ignored by git.
+ * Nothing it writes is committed. Every CI run generates the page, its data and
+ * the status snapshot afresh and deploys them, and a local build has a page to
+ * show only after this script has run.
  *
- *   npm run sync:deps              # regenerate the page and the status snapshot
- *   npm run sync:deps -- --check   # fail if the page is out of date
+ *   npm run sync:deps              # generate the page, its data and the status snapshot
  *   npm run sync:deps -- --cache   # also reuse releases and registry answers from the last 24 hours
  *   npm run sync:deps -- --drift   # report outdated versions instead (not committed)
  *   npm run sync:deps -- --drift --outdated   # … leaving out packages that are current
@@ -25,9 +23,8 @@
  * reads only what changed since. Deleting the folder costs one slower run.
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { writeFileSync } from 'fs';
 import { resolve } from 'path';
-import * as prettier from 'prettier';
 import { loadConfig, validateConfig, CONFIG_PATH } from './dependency-graph/config';
 import { GitHub, mapLimit, type Checkout, type RepoInfo } from './dependency-graph/github';
 import { buildNameMaps, classify, collectEdges, type RepoFile } from './dependency-graph/collect';
@@ -59,24 +56,21 @@ const FALLBACK_TAG = {
 };
 
 interface Options {
-	check: boolean;
 	cache: boolean;
 	drift: boolean;
 	outdated: boolean;
 }
 
-const FLAGS = ['--check', '--cache', '--drift', '--outdated'];
+const FLAGS = ['--cache', '--drift', '--outdated'];
 
 function parseArgs(argv: string[]): Options {
 	const unknown = argv.filter((arg) => !FLAGS.includes(arg));
 	if (unknown.length > 0) throw new Error(`unknown option(s): ${unknown.join(', ')}`);
 	const options = {
-		check: argv.includes('--check'),
 		cache: argv.includes('--cache'),
 		drift: argv.includes('--drift'),
 		outdated: argv.includes('--outdated'),
 	};
-	if (options.drift && options.check) throw new Error('--drift and --check cannot be combined');
 	if (options.outdated && !options.drift) throw new Error('--outdated only applies to --drift');
 	return options;
 }
@@ -124,7 +118,7 @@ async function findHeads(github: GitHub, org: string): Promise<Map<string, strin
 }
 
 async function main(): Promise<void> {
-	const { check, cache, drift, outdated } = parseArgs(process.argv.slice(2));
+	const { cache, drift, outdated } = parseArgs(process.argv.slice(2));
 	const config = loadConfig(ROOT);
 	const github = new GitHub({ cache, store: resolve(ROOT, STORE) });
 
@@ -275,41 +269,12 @@ async function main(): Promise<void> {
 		skipped,
 	});
 
-	// Both outputs go through prettier, so that `npm run format` finds nothing
-	// left to change and --check cannot fail on formatting alone. The config has
-	// per-extension overrides, so it has to be resolved for each file separately.
-	const format = async (
-		path: string,
-		content: string,
-	): Promise<{ path: string; content: string }> => {
-		const absolute = resolve(ROOT, path);
-		const options = await prettier.resolveConfig(absolute);
-		return { path, content: await prettier.format(content, { ...options, filepath: absolute }) };
-	};
-	const targets = [await format(TARGET_PAGE, page), await format(TARGET_DATA, renderJson(graph))];
-
 	for (const warning of warnings) console.warn(`[dependency-graph] ${warning}`);
 
-	const stale = targets.filter(({ path, content }) => {
-		const absolute = resolve(ROOT, path);
-		return !existsSync(absolute) || readFileSync(absolute, 'utf8') !== content;
-	});
-
-	if (check) {
-		if (stale.length === 0) {
-			console.log('[dependency-graph] page is up to date');
-			return;
-		}
-		console.error('The dependency graph no longer matches the repositories:');
-		for (const { path } of stale) console.error(`  ${path}`);
-		console.error('Run `npm run sync:deps` and commit the result.');
-		process.exit(1);
-	}
-
-	for (const { path, content } of targets) writeFileSync(resolve(ROOT, path), content);
+	writeFileSync(resolve(ROOT, TARGET_PAGE), page);
+	writeFileSync(resolve(ROOT, TARGET_DATA), renderJson(graph));
 	console.log(
-		`[dependency-graph] ${graph.repos.length} repositories, ${graph.edges.length} dependencies` +
-			(stale.length === 0 ? ' (unchanged)' : `, updated ${stale.length} file(s)`),
+		`[dependency-graph] ${graph.repos.length} repositories, ${graph.edges.length} dependencies`,
 	);
 
 	const collectRepos = () =>

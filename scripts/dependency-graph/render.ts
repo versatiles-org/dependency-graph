@@ -18,10 +18,15 @@ import {
 } from './model';
 import { CONFIG_PATH } from './config';
 
-/** Where the machine-readable copy of the graph lives in the repository. */
-const DATA_PATH = 'public/dependency-graph.json';
-/** The bare file name reads better as link text than the path does. */
-const DATA_NAME = DATA_PATH.split('/').pop();
+/**
+ * Where the machine-readable copy of the graph is published. It is generated
+ * for each deploy and never committed, so the repository has no copy to link.
+ * The URL is absolute because link checking works on files on disk, and the
+ * site serves `public/` from its root, so no relative link would resolve.
+ */
+const DATA_URL = 'https://versatiles.org/dependency-graph/dependency-graph.json';
+/** The bare file name reads better as link text than the URL does. */
+const DATA_NAME = DATA_URL.split('/').pop();
 
 function repoUrl(org: string, repo: string): string {
 	return `https://github.com/${org}/${repo}`;
@@ -194,11 +199,8 @@ export function renderPage({ graph, branches, skipped }: RenderOptions): string 
 		'',
 		'Every arrow therefore has a file and a line behind it, listed in the tables above and',
 		'available as machine-readable data in',
-		// Linked at its place in the repository rather than at its published URL:
-		// the site serves `public/` from the root, so the published path is right for a
-		// reader but resolves to nothing on disk, which is what link checking works on.
-		`[\`${DATA_NAME}\`](https://github.com/${org}/dependency-graph/blob/main/${DATA_PATH}),`,
-		'published alongside this page as `/dependency-graph/dependency-graph.json`. What no parser can see —',
+		`[\`${DATA_NAME}\`](${DATA_URL}),`,
+		'published alongside this page. What no parser can see —',
 		'operational dependencies, for instance — is declared by hand in',
 		`[\`${CONFIG_PATH}\`](https://github.com/${org}/dependency-graph/blob/main/${CONFIG_PATH}),`,
 		'which is also where false positives are filtered out and repositories are assigned to',

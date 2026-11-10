@@ -3,9 +3,9 @@ name: CI
 # The graph and the status page describe the whole organisation, so they go
 # stale whenever any other repository changes or releases. This workflow
 # therefore rebuilds them every six hours as well as on every push, and deploys
-# in the same run: a push made with GITHUB_TOKEN starts no workflow, so a later
-# run could not publish the result. The status snapshot is not committed, so
-# every run deploys, even when the graph itself has not changed.
+# what it built. Nothing it generates is committed: every run reads the
+# repositories afresh, pull requests included, so that a change to the scripts
+# is built from the same data as a deploy.
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       # Read by the status page, which reports what is open and whether checks pass.
       issues: read
       pull-requests: read
@@ -53,28 +53,12 @@ jobs:
         run: npm run test
 
       - name: Rebuild the dependency graph
-        if: github.event_name != 'pull_request'
         run: npm run sync:deps
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # A generated page can break the site, so build before committing.
       - name: Build
         run: npm run build
-
-      - name: Commit and push
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          if [ -z "$(git status --porcelain index.md public/dependency-graph.json)" ]; then
-            echo "no changes"
-            exit 0
-          fi
-          git add index.md public/dependency-graph.json
-          git commit -m 'update repository dependency graph'
-          git push
-        shell: bash
 
       - name: Add .nojekyll
         run: touch ./.vitepress/dist/.nojekyll
