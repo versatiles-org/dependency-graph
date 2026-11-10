@@ -5,6 +5,7 @@
 
 import type {
 	DependentReport,
+	DeploymentFinding,
 	DeploymentReport,
 	DriftReport,
 	Finding,
@@ -164,4 +165,38 @@ export function filterDrift(
 	});
 
 	return { queue, packages };
+}
+
+export interface OpenCounts {
+	/** Repositories to update. */
+	queue: number;
+	/** Pinned releases behind. */
+	pins: number;
+	/** Deployed components behind. */
+	deployments: number;
+	/** Repositories whose CI fails. */
+	repos: number;
+	/** Packages that some repository is behind on. */
+	packages: number;
+}
+
+/** What is left to do in each part of the status page, among what the filter leaves. */
+export function countOpen(lists: {
+	queue: readonly unknown[];
+	packages: readonly { usages: readonly Pick<Finding, 'status'>[] }[];
+	pins: readonly Pick<PinFinding, 'status'>[];
+	deployments: readonly { findings: readonly Pick<DeploymentFinding, 'status'>[] }[];
+	repos: readonly Pick<RepoStatus, 'ci'>[];
+}): OpenCounts {
+	return {
+		queue: lists.queue.length,
+		pins: lists.pins.filter((pin) => pin.status === 'behind').length,
+		deployments: lists.deployments
+			.flatMap((deployment) => deployment.findings)
+			.filter((finding) => finding.status === 'behind').length,
+		repos: lists.repos.filter((repo) => repo.ci === 'failing').length,
+		packages: lists.packages.filter((entry) =>
+			entry.usages.some((usage) => usage.status === 'range' || usage.status === 'stale-lock'),
+		).length,
+	};
 }

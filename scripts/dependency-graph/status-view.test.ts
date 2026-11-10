@@ -11,6 +11,7 @@ import {
 } from './drift';
 import type { RepoStatus } from './repo-status';
 import {
+	countOpen,
 	daysAgo,
 	filterDeployments,
 	filterDrift,
@@ -73,6 +74,27 @@ describe('pinLocation', () => {
 
 	it('still names the component when the release could not be read', () => {
 		expect(pinLocation({ ...none, component: 'Style' })).toBe('latest release: Style');
+	});
+});
+
+describe('countOpen', () => {
+	it('counts only what is left to do', () => {
+		expect(
+			countOpen({
+				queue: [{}, {}],
+				packages: [
+					{ usages: [{ status: 'current' }, { status: 'range' }] },
+					{ usages: [{ status: 'stale-lock' }] },
+					{ usages: [{ status: 'ahead' }, { status: 'unknown' }, { status: 'current' }] },
+				],
+				pins: [{ status: 'behind' }, { status: 'current' }, { status: 'unknown' }],
+				deployments: [
+					{ findings: [{ status: 'behind' }, { status: 'behind' }] },
+					{ findings: [{ status: 'ahead' }] },
+				],
+				repos: [{ ci: 'failing' }, { ci: 'passing' }, { ci: 'none' }],
+			}),
+		).toEqual({ queue: 2, packages: 2, pins: 1, deployments: 2, repos: 1 });
 	});
 });
 

@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { data } from '../../../status.data';
 import type { PinFinding, Status } from '../../../scripts/dependency-graph/drift';
 import {
+	countOpen,
 	daysAgo,
 	filterDeployments,
 	filterDrift,
@@ -68,7 +69,6 @@ const report = data?.drift.status === 'ok' ? data.drift.data : null;
 const driftError = data?.drift.status === 'failed' ? data.drift.error : null;
 const repoStatus = data?.repos.status === 'ok' ? data.repos.data : null;
 const reposError = data?.repos.status === 'failed' ? data.repos.error : null;
-const ciFailing = repoStatus?.filter((repo) => repo.ci === 'failing').length ?? null;
 
 /** Unknown until mounted: the server must not bake an age into the page. */
 const now = ref<Date | null>(null);
@@ -98,6 +98,117 @@ const listedRepos = computed(() => listRepos(repoStatus ?? [], query.value));
 const listedPins = computed(() => filterPins(report?.pins ?? [], query.value));
 const listedDeployments = computed(() => filterDeployments(report?.deployments ?? [], query.value));
 const when = (date: string): string => (now.value ? daysAgo(date, now.value) : date.slice(0, 10));
+
+/*
+ * One tab for each part of the page. A tab's id is the id its section had, so
+ * links to `#deployments` and the like still lead there.
+ */
+type TabId =
+	'outdated-dependencies' | 'pinned-releases' | 'deployments' | 'repositories' | 'packages';
+interface Tab {
+	id: TabId;
+	label: string;
+	/** What is left to do there, or null when that is unknown. */
+	count: number | null;
+	/** What the count counts, read out after it. */
+	counted: string;
+	tone: Status;
+}
+
+const openCounts = computed(() =>
+	countOpen({
+		queue: filtered.value.queue,
+		packages: filtered.value.packages,
+		pins: listedPins.value,
+		deployments: listedDeployments.value,
+		repos: listedRepos.value,
+	}),
+);
+/** Which tabs there are depends on the snapshot alone, so a filter never removes one. */
+const tabs = computed((): Tab[] => {
+	const count = openCounts.value;
+	const list: Tab[] = [];
+	if (report) {
+		list.push({
+			id: 'outdated-dependencies',
+			label: 'Outdated dependencies',
+			count: count.queue,
+			counted: count.queue === 1 ? 'repository to update' : 'repositories to update',
+			tone: 'stale-lock',
+		});
+		if (report.pins.length > 0) {
+			list.push({
+				id: 'pinned-releases',
+				label: 'Pinned releases',
+				count: count.pins,
+				counted: 'behind',
+				tone: 'stale-lock',
+			});
+		}
+		if (report.deployments.length > 0) {
+			list.push({
+				id: 'deployments',
+				label: 'Deployments',
+				count: count.deployments,
+				counted: count.deployments === 1 ? 'component behind' : 'components behind',
+				tone: 'stale-lock',
+			});
+		}
+	}
+	list.push({
+		id: 'repositories',
+		label: 'Repositories',
+		count: repoStatus ? count.repos : null,
+		counted: 'failing CI',
+		tone: 'range',
+	});
+	if (report) {
+		list.push({
+			id: 'packages',
+			label: 'Packages',
+			count: count.packages,
+			counted: 'behind',
+			tone: 'stale-lock',
+		});
+	}
+	return list;
+});
+
+const selected = ref<TabId>(tabs.value[0].id);
+const isTab = (id: string): id is TabId => tabs.value.some((tab) => tab.id === id);
+/** The hash picks the tab, both on arrival and when a link on the page changes it. */
+const showHash = (): void => {
+	const id = decodeURIComponent(window.location.hash.slice(1));
+	if (isTab(id)) selected.value = id;
+};
+onMounted(() => {
+	showHash();
+	window.addEventListener('hashchange', showHash);
+});
+onBeforeUnmount(() => window.removeEventListener('hashchange', showHash));
+
+/** Replaced rather than pushed: a new entry would make VitePress reload the page on back. */
+function select(id: TabId): void {
+	selected.value = id;
+	history.replaceState(history.state, '', `#${id}`);
+}
+
+/** Arrow keys, Home and End move between tabs, as in the ARIA tabs pattern. */
+function onTabKey(event: KeyboardEvent): void {
+	const ids = tabs.value.map((tab) => tab.id);
+	const index = ids.indexOf(selected.value);
+	const moves: Record<string, number> = {
+		ArrowLeft: index - 1,
+		ArrowRight: index + 1,
+		Home: 0,
+		End: ids.length - 1,
+	};
+	if (!(event.key in moves)) return;
+	event.preventDefault();
+	const id = ids[(moves[event.key] + ids.length) % ids.length];
+	select(id);
+	document.getElementById(id)?.focus();
+}
 
 /** What a pinned version or a running component needs, starting like the labels around it. */
 function stateText(row: { status: string; note: string; behind: string | null }): string {
@@ -243,49 +354,53 @@ const laneColor = (index: number): string => {
 							}}
 						</li>
 					</ul>
-					<ul class="legend">
-						<li>
-							<strong>{{ report.totals.pinsBehind }}</strong>
-							<a href="#pinned-releases"
-								>{{
-									report.totals.pinsBehind === 1 ? 'pinned release' : 'pinned releases'
-								}}
-								behind</a
-							>
-						</li>
-						<li>
-							<strong>{{ report.totals.deploymentsBehind }}</strong>
-							<a href="#deployments"
-								>{{
-									report.totals.deploymentsBehind === 1
-										? 'deployed component'
-										: 'deployed components'
-								}}
-								behind</a
-							>
-						</li>
-						<li v-if="ciFailing !== null">
-							<strong>{{ ciFailing }}</strong>
-							<a href="#repositories"
-								>{{ ciFailing === 1 ? 'repository' : 'repositories' }} failing CI</a
-							>
-						</li>
-					</ul>
 				</section>
+			</template>
 
-				<div class="filters">
-					<label class="search">
-						<span>Filter</span>
-						<input v-model="query" type="search" placeholder="Repository or package" />
-					</label>
-					<label class="toggle">
-						<input v-model="hideDev" type="checkbox" />
-						Hide development dependencies
-					</label>
-				</div>
+			<!-- Above the tabs, because it narrows every one of them. -->
+			<div class="filters">
+				<label class="search">
+					<span>Filter</span>
+					<input v-model="query" type="search" placeholder="Repository or package" />
+				</label>
+				<label v-if="report" class="toggle">
+					<input v-model="hideDev" type="checkbox" />
+					Hide development dependencies
+				</label>
+			</div>
 
-				<section id="outdated-dependencies">
-					<h2>Outdated dependencies</h2>
+			<div class="tabs" role="tablist" aria-label="Parts of the status" @keydown="onTabKey">
+				<button
+					v-for="tab in tabs"
+					:id="tab.id"
+					:key="tab.id"
+					type="button"
+					role="tab"
+					class="tab"
+					:class="{ selected: selected === tab.id }"
+					:aria-selected="selected === tab.id"
+					:aria-controls="`${tab.id}-panel`"
+					:tabindex="selected === tab.id ? 0 : -1"
+					@click="select(tab.id)"
+				>
+					{{ tab.label }}
+					<span
+						v-if="tab.count !== null"
+						class="badge"
+						:class="tab.count > 0 ? `is-${tab.tone}` : 'is-zero'"
+						:title="`${tab.count} ${tab.counted}`"
+						>{{ tab.count }}<span class="visually-hidden"> {{ tab.counted }}</span></span
+					>
+				</button>
+			</div>
+
+			<template v-if="report">
+				<section
+					v-show="selected === 'outdated-dependencies'"
+					id="outdated-dependencies-panel"
+					role="tabpanel"
+					aria-labelledby="outdated-dependencies"
+				>
 					<p class="hint">
 						Work from the top. Each repository comes after the ones it builds on, so nothing
 						has to be updated twice.
@@ -337,16 +452,16 @@ const laneColor = (index: number): string => {
 								<span :style="{ left: `${behindLeft}px` }">Behind</span>
 								<span :style="{ left: `${updateLeft}px` }">Update</span>
 							</div>
-							<h3
+							<h2
 								v-if="graph.hasReleases"
 								class="graph-group"
 								:style="{ top: `${metrics.firstLabelTop}px` }"
 							>
 								Packages with a newer release
-							</h3>
-							<h3 class="graph-group" :style="{ top: `${graph.queueLabelTop}px` }">
+							</h2>
+							<h2 class="graph-group" :style="{ top: `${graph.queueLabelTop}px` }">
 								Repositories to update, in order
-							</h3>
+							</h2>
 
 							<div
 								v-for="(row, index) in graph.rows"
@@ -539,8 +654,13 @@ const laneColor = (index: number): string => {
 					</p>
 				</section>
 
-				<section v-if="report.pins.length > 0" id="pinned-releases">
-					<h2>Pinned releases</h2>
+				<section
+					v-if="report.pins.length > 0"
+					v-show="selected === 'pinned-releases'"
+					id="pinned-releases-panel"
+					role="tabpanel"
+					aria-labelledby="pinned-releases"
+				>
 					<p class="hint">
 						Exact versions fixed in a file, an image tag or a bundled release. References to
 						"latest" are left out, because they cannot fall behind.
@@ -605,8 +725,13 @@ const laneColor = (index: number): string => {
 					<p v-else class="empty">No pinned release matches the filter.</p>
 				</section>
 
-				<section v-if="report.deployments.length > 0" id="deployments">
-					<h2>Deployments</h2>
+				<section
+					v-if="report.deployments.length > 0"
+					v-show="selected === 'deployments'"
+					id="deployments-panel"
+					role="tabpanel"
+					aria-labelledby="deployments"
+				>
 					<p class="hint">What our public services run, compared with the latest releases.</p>
 					<p v-if="listedDeployments.length === 0" class="empty">
 						No deployment matches the filter.
@@ -667,8 +792,12 @@ const laneColor = (index: number): string => {
 			</template>
 
 			<!-- Outside the report: a failure there says nothing about the repositories. -->
-			<section id="repositories">
-				<h2>Repositories</h2>
+			<section
+				v-show="selected === 'repositories'"
+				id="repositories-panel"
+				role="tabpanel"
+				aria-labelledby="repositories"
+			>
 				<p v-if="reposError" class="notice failed">
 					The latest update could not check the repositories. The next one tries again.
 					<code>{{ reposError }}</code>
@@ -758,18 +887,22 @@ const laneColor = (index: number): string => {
 			</section>
 
 			<template v-if="report">
-				<section id="packages">
+				<section
+					v-show="selected === 'packages'"
+					id="packages-panel"
+					role="tabpanel"
+					aria-labelledby="packages"
+				>
 					<div class="heading">
-						<h2>All packages</h2>
+						<p class="hint">
+							Every package of ours that a repository depends on, and the versions in use.
+							Open one to see who uses it.
+						</p>
 						<label class="toggle">
 							<input v-model="onlyOutdated" type="checkbox" />
 							Only show outdated packages
 						</label>
 					</div>
-					<p class="hint">
-						Every package of ours that a repository depends on, and the versions in use. Open
-						one to see who uses it.
-					</p>
 					<div v-if="filtered.packages.length > 0" class="packages">
 						<div class="packages-head">
 							<span></span>
@@ -960,17 +1093,7 @@ code,
 }
 
 section {
-	margin-top: 40px;
-	/* Clear of the fixed navigation bar when jumped to from the summary. */
-	scroll-margin-top: 80px;
-}
-
-h2 {
-	margin: 0;
-	color: var(--vp-c-text-1);
-	font-size: 20px;
-	font-weight: 600;
-	line-height: 1.4;
+	margin-top: 16px;
 }
 
 .hint {
@@ -1115,6 +1238,66 @@ h2 {
 
 	input {
 		accent-color: var(--vp-c-brand-1);
+	}
+}
+
+/* Tabs ------------------------------------------------------------------- */
+
+.tabs {
+	display: flex;
+	gap: 4px;
+	margin-top: 24px;
+	overflow-x: auto;
+	/*
+	 * A shadow rather than a border: the selected tab's line covers it without a
+	 * negative margin, which would make the row scroll vertically.
+	 */
+	box-shadow: inset 0 -1px var(--vp-c-divider);
+}
+
+.tab {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	border-bottom: 2px solid transparent;
+	color: var(--vp-c-text-2);
+	font-weight: 500;
+	white-space: nowrap;
+	/* Clear of the fixed navigation bar when a link leads to a tab. */
+	scroll-margin-top: 80px;
+
+	&:hover {
+		color: var(--vp-c-text-1);
+	}
+
+	&.selected {
+		border-bottom-color: var(--vp-c-brand-1);
+		color: var(--vp-c-text-1);
+	}
+
+	/* The row scrolls, so an outline outside the tab would be cut off. */
+	&:focus-visible {
+		outline-offset: -2px;
+	}
+}
+
+.badge {
+	min-width: 20px;
+	padding: 0 6px;
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--st-color) 16%, transparent);
+	color: var(--st-color);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+	line-height: 18px;
+	text-align: center;
+
+	&.is-zero {
+		background: var(--vp-c-default-soft);
+		color: var(--vp-c-text-2);
 	}
 }
 
