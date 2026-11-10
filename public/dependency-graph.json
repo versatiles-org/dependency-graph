@@ -864,7 +864,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
-			"line": 43
+			"line": 45
 		},
 		{
 			"from": "versatiles-map-animator",
@@ -872,13 +872,13 @@
 			"kind": "npm",
 			"detail": "@versatiles/style@^9.1.0",
 			"path": "package.json",
-			"line": 44
+			"line": 46
 		},
 		{
 			"from": "versatiles-map-editor",
 			"to": "node-release-tool",
 			"kind": "npm",
-			"detail": "@versatiles/release-tool@^2.21.0",
+			"detail": "@versatiles/release-tool@^2.22.0",
 			"path": "package.json",
 			"line": 61
 		},
@@ -894,7 +894,7 @@
 			"from": "versatiles-map-editor",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^9.0.0",
+			"detail": "@versatiles/style@^9.1.0",
 			"path": "package.json",
 			"line": 50
 		},
