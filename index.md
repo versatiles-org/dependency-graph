@@ -132,11 +132,11 @@ The repository lists a `@versatiles/…` package among its npm dependencies.
 | maplibre-versatiles-styler   | node-release-tool          | `@versatiles/release-tool@^2.22.0`       | [package.json](https://github.com/versatiles-org/maplibre-versatiles-styler/blob/main/package.json#L64)   |
 | maplibre-versatiles-styler   | versatiles-style           | `@versatiles/style@^9.1.0`               | [package.json](https://github.com/versatiles-org/maplibre-versatiles-styler/blob/main/package.json#L65)   |
 | node-versatiles-container    | node-release-tool          | `@versatiles/release-tool@^2.22.0`       | [package.json](https://github.com/versatiles-org/node-versatiles-container/blob/main/package.json#L78)    |
-| node-versatiles-google-cloud | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/node-versatiles-google-cloud/blob/main/package.json#L87) |
-| node-versatiles-google-cloud | node-versatiles-container  | `@versatiles/container@^2.1.1`           | [package.json](https://github.com/versatiles-org/node-versatiles-google-cloud/blob/main/package.json#L73) |
+| node-versatiles-google-cloud | node-release-tool          | `@versatiles/release-tool@^2.22.0`       | [package.json](https://github.com/versatiles-org/node-versatiles-google-cloud/blob/main/package.json#L87) |
+| node-versatiles-google-cloud | node-versatiles-container  | `@versatiles/container@^2.1.2`           | [package.json](https://github.com/versatiles-org/node-versatiles-google-cloud/blob/main/package.json#L73) |
 | node-versatiles-google-cloud | versatiles-style           | `@versatiles/style@^9.1.0`               | [package.json](https://github.com/versatiles-org/node-versatiles-google-cloud/blob/main/package.json#L74) |
-| node-versatiles-server       | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/node-versatiles-server/blob/main/package.json#L82)       |
-| node-versatiles-server       | node-versatiles-container  | `@versatiles/container@^2.1.1`           | [package.json](https://github.com/versatiles-org/node-versatiles-server/blob/main/package.json#L74)       |
+| node-versatiles-server       | node-release-tool          | `@versatiles/release-tool@^2.22.0`       | [package.json](https://github.com/versatiles-org/node-versatiles-server/blob/main/package.json#L82)       |
+| node-versatiles-server       | node-versatiles-container  | `@versatiles/container@^2.1.2`           | [package.json](https://github.com/versatiles-org/node-versatiles-server/blob/main/package.json#L74)       |
 | node-versatiles-server       | versatiles-style           | `@versatiles/style@^9.1.0`               | [package.json](https://github.com/versatiles-org/node-versatiles-server/blob/main/package.json#L75)       |
 | node-versatiles-svelte       | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/node-versatiles-svelte/blob/main/package.json#L68)       |
 | node-versatiles-svelte       | versatiles-style           | `@versatiles/style@^9.1.0`               | [package.json](https://github.com/versatiles-org/node-versatiles-svelte/blob/main/package.json#L94)       |
@@ -237,11 +237,12 @@ Build scripts or runtime code fetch release assets or raw files from another rep
 
 A GitHub Actions workflow uses an action, reusable workflow or checkout of another repository.
 
-::: details Where these 2 links come from
+::: details Where these 3 links come from
 
 | From                      | To                | Found                                                                    | Source                                                                                                                                   |
 | ------------------------- | ----------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | node-versatiles-container | node-release-tool | `versatiles-org/node-release-tool/.github/workflows/release.yml@v2.22.0` | [.github/workflows/release.yml](https://github.com/versatiles-org/node-versatiles-container/blob/main/.github/workflows/release.yml#L21) |
+| node-versatiles-server    | node-release-tool | `versatiles-org/node-release-tool/.github/workflows/release.yml@v2.22.0` | [.github/workflows/release.yml](https://github.com/versatiles-org/node-versatiles-server/blob/main/.github/workflows/release.yml#L21)    |
 | planetiler-shortbread     | planetiler        | `versatiles-org/planetiler`                                              | [.github/workflows/ci.yml](https://github.com/versatiles-org/planetiler-shortbread/blob/main/.github/workflows/ci.yml#L81)               |
 
 :::

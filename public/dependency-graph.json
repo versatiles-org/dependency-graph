@@ -470,7 +470,7 @@
 			"from": "node-versatiles-google-cloud",
 			"to": "node-release-tool",
 			"kind": "npm",
-			"detail": "@versatiles/release-tool@^2.21.0",
+			"detail": "@versatiles/release-tool@^2.22.0",
 			"path": "package.json",
 			"line": 87
 		},
@@ -478,7 +478,7 @@
 			"from": "node-versatiles-google-cloud",
 			"to": "node-versatiles-container",
 			"kind": "npm",
-			"detail": "@versatiles/container@^2.1.1",
+			"detail": "@versatiles/container@^2.1.2",
 			"path": "package.json",
 			"line": 73
 		},
@@ -494,15 +494,23 @@
 			"from": "node-versatiles-server",
 			"to": "node-release-tool",
 			"kind": "npm",
-			"detail": "@versatiles/release-tool@^2.21.0",
+			"detail": "@versatiles/release-tool@^2.22.0",
 			"path": "package.json",
 			"line": 82
 		},
 		{
 			"from": "node-versatiles-server",
+			"to": "node-release-tool",
+			"kind": "workflow",
+			"detail": "versatiles-org/node-release-tool/.github/workflows/release.yml@v2.22.0",
+			"path": ".github/workflows/release.yml",
+			"line": 21
+		},
+		{
+			"from": "node-versatiles-server",
 			"to": "node-versatiles-container",
 			"kind": "npm",
-			"detail": "@versatiles/container@^2.1.1",
+			"detail": "@versatiles/container@^2.1.2",
 			"path": "package.json",
 			"line": 74
 		},
