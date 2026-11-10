@@ -23,7 +23,7 @@
     "lint": "eslint .",
     "lint:types": "vue-tsc --noEmit",
     "preview": "vitepress preview .",
-    "upgrade": "npm-check-updates -u --peer && npm i && npm audit fix"
+    "upgrade": "vrt deps-upgrade"
   },
   "license": "Unlicense",
   "type": "commonjs",
@@ -37,6 +37,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^26.6.6",
     "@types/semver": "^7.8.0",
+    "@versatiles/release-tool": "^2.23.0",
     "d3-selection": "^3.0.1",
     "d3-zoom": "^3.0.1",
     "elkjs": "^0.12.1",
@@ -46,7 +47,6 @@
     "eslint-plugin-vue": "^10.12.1",
     "globals": "^17.14.0",
     "js-yaml": "^5.5.0",
-    "npm-check-updates": "^23.1.1",
     "prettier": "^3.9.10",
     "semver": "^7.8.6",
     "tsx": "^4.23.15",
