@@ -19,7 +19,16 @@
 
 import { execFileSync } from 'child_process';
 import { createHash } from 'crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'fs';
+import {
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	renameSync,
+	statSync,
+	unlinkSync,
+	writeFileSync,
+} from 'fs';
 import { dirname, resolve } from 'path';
 
 const API = 'https://api.github.com';
@@ -87,6 +96,10 @@ export interface Checkout {
 }
 
 const SHA = /^[0-9a-f]{40}$/;
+/** What `ObjectStore.write` leaves behind when a run stops halfway. */
+const LEFTOVER = /^[0-9a-f]{40}\.\d+\.tmp$/;
+const KINDS = ['blobs', 'trees'] as const;
+type Kind = (typeof KINDS)[number];
 
 /** Git's name for a file's content, so that a stored copy can be checked against it. */
 export function blobSha(text: string): string {
@@ -98,11 +111,16 @@ export function blobSha(text: string): string {
  * Files by their blob hash and listings by their commit. Neither can change
  * under its name, so nothing here expires. A file is checked against its hash
  * when read back, so a damaged copy is fetched again rather than believed.
+ *
+ * What a run reads or writes is remembered, so that `prune` can drop the rest:
+ * old lockfiles would otherwise pile up with every release.
  */
 export class ObjectStore {
+	private readonly used: Record<Kind, Set<string>> = { blobs: new Set(), trees: new Set() };
+
 	constructor(private readonly dir: string) {}
 
-	private path(kind: 'blobs' | 'trees', sha: string): string | null {
+	private path(kind: Kind, sha: string): string | null {
 		return SHA.test(sha) ? resolve(this.dir, kind, sha) : null;
 	}
 
@@ -118,7 +136,9 @@ export class ObjectStore {
 		const path = this.path('blobs', sha);
 		if (!path || !existsSync(path)) return null;
 		const text = readFileSync(path, 'utf8');
-		return blobSha(text) === sha ? text : null;
+		if (blobSha(text) !== sha) return null;
+		this.used.blobs.add(sha);
+		return text;
 	}
 
 	/**
@@ -127,7 +147,9 @@ export class ObjectStore {
 	 */
 	writeBlob(sha: string, text: string): void {
 		const path = this.path('blobs', sha);
-		if (path && blobSha(text) === sha) this.write(path, text);
+		if (!path || blobSha(text) !== sha) return;
+		this.write(path, text);
+		this.used.blobs.add(sha);
 	}
 
 	readTree(commit: string): TreeFile[] | null {
@@ -135,7 +157,9 @@ export class ObjectStore {
 		if (!path || !existsSync(path)) return null;
 		try {
 			const files = JSON.parse(readFileSync(path, 'utf8')) as unknown;
-			return Array.isArray(files) ? (files as TreeFile[]) : null;
+			if (!Array.isArray(files)) return null;
+			this.used.trees.add(commit);
+			return files as TreeFile[];
 		} catch {
 			return null;
 		}
@@ -143,7 +167,29 @@ export class ObjectStore {
 
 	writeTree(commit: string, files: TreeFile[]): void {
 		const path = this.path('trees', commit);
-		if (path) this.write(path, JSON.stringify(files));
+		if (!path) return;
+		this.write(path, JSON.stringify(files));
+		this.used.trees.add(commit);
+	}
+
+	/**
+	 * Removes every object this run did not use, and what interrupted runs left
+	 * half written, so that the store holds one run's worth and no more. Only
+	 * names this store could have written are touched. Returns how many went.
+	 */
+	prune(): number {
+		let removed = 0;
+		for (const kind of KINDS) {
+			const dir = resolve(this.dir, kind);
+			if (!existsSync(dir)) continue;
+			for (const name of readdirSync(dir)) {
+				const unused = SHA.test(name) && !this.used[kind].has(name);
+				if (!unused && !LEFTOVER.test(name)) continue;
+				unlinkSync(resolve(dir, name));
+				removed++;
+			}
+		}
+		return removed;
 	}
 }
 
@@ -250,6 +296,14 @@ export class GitHub {
 	/** Listings and files taken from the object store instead of from GitHub. */
 	get storedCount(): number {
 		return this.stored;
+	}
+
+	/**
+	 * Drops from the object store what this run did not use. Only call it after
+	 * a run that read everything it needs: whatever it skipped is fetched again.
+	 */
+	pruneStore(): number {
+		return this.store?.prune() ?? 0;
 	}
 
 	private cachePath(url: string): string | null {

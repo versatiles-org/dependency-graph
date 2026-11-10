@@ -52,6 +52,17 @@ jobs:
       - name: Test
         run: npm run test
 
+      # Files and listings under their git hashes, so that a run fetches only what
+      # changed since the last one. Nothing in it can go stale, so the newest
+      # entry is always the right one to start from. A cache entry can't be
+      # overwritten, so each run saves its own, and only when the job succeeds.
+      - name: Restore the files read by earlier runs
+        uses: actions/cache@v6
+        with:
+          path: .cache/github
+          key: github-objects-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: github-objects-
+
       - name: Rebuild the dependency graph
         run: npm run sync:deps
         env:

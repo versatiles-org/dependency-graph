@@ -28,4 +28,4 @@ npm run check          # format, lint, type-check, test and build
 
 A GitHub token is read from `GITHUB_TOKEN`, `GH_TOKEN` or `gh auth token`.
 
-Every run reads each repository as of its head commit, and keeps the files it reads in `.cache/github` under their git hashes. The next run fetches only what changed. Nothing there can go stale, and deleting it only makes one run slower.
+Every run reads each repository as of its head commit, and keeps the files it reads in `.cache/github` under their git hashes. The next run fetches only what changed, and a run that completes removes what it didn't use. CI keeps the folder between runs with `actions/cache`. Nothing there can go stale, and deleting it only makes one run slower.

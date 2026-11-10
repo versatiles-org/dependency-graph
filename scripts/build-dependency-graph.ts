@@ -20,7 +20,8 @@
  * A GitHub token is read from GITHUB_TOKEN, GH_TOKEN or `gh auth token`.
  *
  * Every run keeps the files it reads in STORE, under their git hashes, and
- * reads only what changed since. Deleting the folder costs one slower run.
+ * reads only what changed since. A run that completes removes what it did not
+ * use. CI keeps the folder between runs, and deleting it costs one slower run.
  */
 
 import { writeFileSync } from 'fs';
@@ -212,6 +213,14 @@ async function main(): Promise<void> {
 		return index === -1 ? config.updateOrder.length : index;
 	};
 
+	/** Run only once everything was read, or the next run fetches what was skipped. */
+	const prune = (): void => {
+		const removed = github.pruneStore();
+		if (removed > 0) {
+			console.log(`[dependency-graph] removed ${removed} files no longer needed from ${STORE}`);
+		}
+	};
+
 	if (drift) {
 		console.log(
 			'\n' +
@@ -222,6 +231,7 @@ async function main(): Promise<void> {
 					rank,
 				}),
 		);
+		prune();
 		return;
 	}
 	const names = new Set(repos.map((repo) => repo.name));
@@ -293,9 +303,11 @@ async function main(): Promise<void> {
 	}
 	writeFileSync(resolve(ROOT, TARGET_STATUS), renderStatusJson(snapshot));
 	if (snapshot.drift.status === 'failed') {
+		// Lockfiles it never got to would be pruned, only to be fetched again next time.
 		console.warn(`[dependency-graph] status: versions not checked: ${snapshot.drift.error}`);
 	} else {
 		console.log(`[dependency-graph] status snapshot written to ${TARGET_STATUS}`);
+		prune();
 	}
 }
 

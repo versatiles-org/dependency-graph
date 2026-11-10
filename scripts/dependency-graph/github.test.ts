@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -364,6 +364,39 @@ describe('the object store', () => {
 		await github.checkout('versatiles-org', repo('x'), COMMIT);
 		expect(fetchMock).toHaveBeenCalledTimes(4);
 		warn.mockRestore();
+	});
+
+	it('prunes what the run did not use, and leaves foreign files alone', () => {
+		const earlier = new ObjectStore(dir);
+		for (const text of ['kept', 'dropped', 'rewritten']) earlier.writeBlob(blobSha(text), text);
+		earlier.writeTree(COMMIT, []);
+		earlier.writeTree('f'.repeat(40), []);
+		writeFileSync(join(dir, 'blobs', `${blobSha('half')}.123.tmp`), 'ha');
+		writeFileSync(join(dir, 'blobs', 'notes.txt'), 'mine');
+
+		const store = new ObjectStore(dir);
+		expect(store.readBlob(blobSha('kept'))).toBe('kept');
+		store.writeBlob(blobSha('rewritten'), 'rewritten');
+		expect(store.readTree(COMMIT)).toEqual([]);
+		expect(store.prune()).toBe(3);
+
+		expect(readdirSync(join(dir, 'blobs')).sort()).toEqual(
+			[blobSha('kept'), blobSha('rewritten'), 'notes.txt'].sort(),
+		);
+		expect(readdirSync(join(dir, 'trees'))).toEqual([COMMIT]);
+	});
+
+	it('does not count a damaged file as used', () => {
+		const sha = blobSha('right');
+		mkdirSync(join(dir, 'blobs'), { recursive: true });
+		writeFileSync(join(dir, 'blobs', sha), 'wrong');
+		const store = new ObjectStore(dir);
+		expect(store.readBlob(sha)).toBeNull();
+		expect(store.prune()).toBe(1);
+	});
+
+	it('prunes nothing in a store that was never written', () => {
+		expect(new ObjectStore(join(dir, 'missing')).prune()).toBe(0);
 	});
 
 	it('never stores what does not match its hash', () => {
