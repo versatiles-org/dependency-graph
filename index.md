@@ -129,9 +129,9 @@ The repository lists a `@versatiles/…` package among its npm dependencies.
 | elevation                    | versatiles-rs              | `@versatiles/versatiles-rs@^5.7.0`       | [package.json](https://github.com/versatiles-org/elevation/blob/main/package.json#L40)                    |
 | landcover-vectors            | versatiles-rs              | `@versatiles/versatiles-rs@^5.6.0`       | [package.json](https://github.com/versatiles-org/landcover-vectors/blob/main/package.json#L35)            |
 | landcover-vectors            | versatiles-style           | `@versatiles/style@^8.1.1`               | [package.json](https://github.com/versatiles-org/landcover-vectors/blob/main/package.json#L34)            |
-| maplibre-versatiles-styler   | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/maplibre-versatiles-styler/blob/main/package.json#L64)   |
+| maplibre-versatiles-styler   | node-release-tool          | `@versatiles/release-tool@^2.22.0`       | [package.json](https://github.com/versatiles-org/maplibre-versatiles-styler/blob/main/package.json#L64)   |
 | maplibre-versatiles-styler   | versatiles-style           | `@versatiles/style@^9.1.0`               | [package.json](https://github.com/versatiles-org/maplibre-versatiles-styler/blob/main/package.json#L65)   |
-| node-versatiles-container    | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/node-versatiles-container/blob/main/package.json#L78)    |
+| node-versatiles-container    | node-release-tool          | `@versatiles/release-tool@^2.22.0`       | [package.json](https://github.com/versatiles-org/node-versatiles-container/blob/main/package.json#L78)    |
 | node-versatiles-google-cloud | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/node-versatiles-google-cloud/blob/main/package.json#L87) |
 | node-versatiles-google-cloud | node-versatiles-container  | `@versatiles/container@^2.1.1`           | [package.json](https://github.com/versatiles-org/node-versatiles-google-cloud/blob/main/package.json#L73) |
 | node-versatiles-google-cloud | versatiles-style           | `@versatiles/style@^9.1.0`               | [package.json](https://github.com/versatiles-org/node-versatiles-google-cloud/blob/main/package.json#L74) |
@@ -158,7 +158,7 @@ The repository lists a `@versatiles/…` package among its npm dependencies.
 | versatiles-org.github.io     | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/versatiles-org.github.io/blob/main/package.json#L26)     |
 | versatiles-studio            | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/versatiles-studio/blob/main/package.json#L58)            |
 | versatiles-studio            | versatiles-style           | `@versatiles/style@^8.1.1`               | [package.json](https://github.com/versatiles-org/versatiles-studio/blob/main/package.json#L89)            |
-| versatiles-style             | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/versatiles-style/blob/main/package.json#L123)            |
+| versatiles-style             | node-release-tool          | `@versatiles/release-tool@^2.22.0`       | [package.json](https://github.com/versatiles-org/versatiles-style/blob/main/package.json#L123)            |
 | versatiles-svg-renderer      | node-release-tool          | `@versatiles/release-tool@^2.21.0`       | [package.json](https://github.com/versatiles-org/versatiles-svg-renderer/blob/main/package.json#L60)      |
 | versatiles-svg-renderer      | versatiles-style           | `@versatiles/style@^9.0.0`               | [package.json](https://github.com/versatiles-org/versatiles-svg-renderer/blob/main/package.json#L61)      |
 
@@ -237,11 +237,12 @@ Build scripts or runtime code fetch release assets or raw files from another rep
 
 A GitHub Actions workflow uses an action, reusable workflow or checkout of another repository.
 
-::: details Where this link comes from
+::: details Where these 2 links come from
 
-| From                  | To         | Found                       | Source                                                                                                                     |
-| --------------------- | ---------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| planetiler-shortbread | planetiler | `versatiles-org/planetiler` | [.github/workflows/ci.yml](https://github.com/versatiles-org/planetiler-shortbread/blob/main/.github/workflows/ci.yml#L81) |
+| From                      | To                | Found                                                                    | Source                                                                                                                                   |
+| ------------------------- | ----------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| node-versatiles-container | node-release-tool | `versatiles-org/node-release-tool/.github/workflows/release.yml@v2.22.0` | [.github/workflows/release.yml](https://github.com/versatiles-org/node-versatiles-container/blob/main/.github/workflows/release.yml#L21) |
+| planetiler-shortbread     | planetiler        | `versatiles-org/planetiler`                                              | [.github/workflows/ci.yml](https://github.com/versatiles-org/planetiler-shortbread/blob/main/.github/workflows/ci.yml#L81)               |
 
 :::
 

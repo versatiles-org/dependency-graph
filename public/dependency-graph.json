@@ -438,7 +438,7 @@
 			"from": "maplibre-versatiles-styler",
 			"to": "node-release-tool",
 			"kind": "npm",
-			"detail": "@versatiles/release-tool@^2.21.0",
+			"detail": "@versatiles/release-tool@^2.22.0",
 			"path": "package.json",
 			"line": 64
 		},
@@ -454,9 +454,17 @@
 			"from": "node-versatiles-container",
 			"to": "node-release-tool",
 			"kind": "npm",
-			"detail": "@versatiles/release-tool@^2.21.0",
+			"detail": "@versatiles/release-tool@^2.22.0",
 			"path": "package.json",
 			"line": 78
+		},
+		{
+			"from": "node-versatiles-container",
+			"to": "node-release-tool",
+			"kind": "workflow",
+			"detail": "versatiles-org/node-release-tool/.github/workflows/release.yml@v2.22.0",
+			"path": ".github/workflows/release.yml",
+			"line": 21
 		},
 		{
 			"from": "node-versatiles-google-cloud",
@@ -1046,7 +1054,7 @@
 			"from": "versatiles-style",
 			"to": "node-release-tool",
 			"kind": "npm",
-			"detail": "@versatiles/release-tool@^2.21.0",
+			"detail": "@versatiles/release-tool@^2.22.0",
 			"path": "package.json",
 			"line": 123
 		},
