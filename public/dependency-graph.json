@@ -440,15 +440,15 @@
 			"kind": "npm",
 			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
-			"line": 58
+			"line": 64
 		},
 		{
 			"from": "maplibre-versatiles-styler",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^9.0.0",
+			"detail": "@versatiles/style@^9.1.0",
 			"path": "package.json",
-			"line": 59
+			"line": 65
 		},
 		{
 			"from": "node-versatiles-container",
@@ -464,7 +464,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
-			"line": 81
+			"line": 87
 		},
 		{
 			"from": "node-versatiles-google-cloud",
@@ -472,15 +472,15 @@
 			"kind": "npm",
 			"detail": "@versatiles/container@^2.1.1",
 			"path": "package.json",
-			"line": 67
+			"line": 73
 		},
 		{
 			"from": "node-versatiles-google-cloud",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^8.1.1",
+			"detail": "@versatiles/style@^9.1.0",
 			"path": "package.json",
-			"line": 68
+			"line": 74
 		},
 		{
 			"from": "node-versatiles-server",
@@ -488,7 +488,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
-			"line": 76
+			"line": 82
 		},
 		{
 			"from": "node-versatiles-server",
@@ -496,7 +496,7 @@
 			"kind": "npm",
 			"detail": "@versatiles/container@^2.1.1",
 			"path": "package.json",
-			"line": 68
+			"line": 74
 		},
 		{
 			"from": "node-versatiles-server",
@@ -510,9 +510,9 @@
 			"from": "node-versatiles-server",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^8.1.1",
+			"detail": "@versatiles/style@^9.1.0",
 			"path": "package.json",
-			"line": 69
+			"line": 75
 		},
 		{
 			"from": "node-versatiles-svelte",
@@ -520,15 +520,15 @@
 			"kind": "npm",
 			"detail": "@versatiles/release-tool@^2.21.0",
 			"path": "package.json",
-			"line": 62
+			"line": 68
 		},
 		{
 			"from": "node-versatiles-svelte",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^9.0.0",
+			"detail": "@versatiles/style@^9.1.0",
 			"path": "package.json",
-			"line": 88
+			"line": 94
 		},
 		{
 			"from": "opendem-gebco-bathymetry",
@@ -870,7 +870,7 @@
 			"from": "versatiles-map-animator",
 			"to": "versatiles-style",
 			"kind": "npm",
-			"detail": "@versatiles/style@^8.1.1",
+			"detail": "@versatiles/style@^9.1.0",
 			"path": "package.json",
 			"line": 44
 		},
