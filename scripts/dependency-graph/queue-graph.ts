@@ -154,6 +154,12 @@ export interface GraphLane {
 	x: number;
 	/** The line of the lane itself, as far as solid lines join it. */
 	line: string;
+	/**
+	 * Where it goes on with only tooling and dotted lines joining it, as far as
+	 * tooling lines do. Drawn in the same widely spaced dots as those lines, so a
+	 * lane only tooling is behind on looks like that all the way.
+	 */
+	toolingLine: string;
 	/** Where it goes on with only dotted lines joining it. */
 	dottedLine: string;
 	/** The arrowheads pointing at its node. */
@@ -301,6 +307,7 @@ export function buildQueueGraph(
 		});
 
 		const solid: string[] = [];
+		const tooling: string[] = [];
 		const dotted: string[] = [];
 		const heads: string[] = [];
 		// Only a cycle has lines from above its own row.
@@ -308,17 +315,22 @@ export function buildQueueGraph(
 			const ends = edges
 				.map((edge) => ({ edge, y: rowOf.get(edge.consumer)!.y }))
 				.filter(({ y }) => (y - own.y) * direction > 0)
-				.map(({ edge, y }) => ({ dotted: edge.dotted, y: y - direction * m.curve }));
+				.map(({ edge, y }) => ({ edge, y: y - direction * m.curve }));
 			if (ends.length === 0) continue;
 			const start = own.y + direction * m.laneOffset;
-			const furthest = (list: typeof ends): number =>
-				Math.max(...list.map(({ y }) => y * direction)) * direction;
-			const solidEnds = ends.filter((end) => !end.dotted);
-			const turn = solidEnds.length > 0 ? furthest(solidEnds) : start;
-			if (solidEnds.length > 0) solid.push(`M ${x} ${start} L ${x} ${turn}`);
-			const end = furthest(ends);
-			if ((end - turn) * direction > 0) dotted.push(`M ${x} ${turn} L ${x} ${end}`);
-			heads.push(head(m, x, start, direction === 1 ? -1 : 1, solidEnds.length === 0 ? 0.6 : 1));
+			// Each part of the lane is drawn like the strongest line still to join it.
+			const reach = (list: typeof ends): number =>
+				list.length > 0 ? Math.max(...list.map(({ y }) => y * direction)) * direction : start;
+			const segment = (from: number, to: number, into: string[]): void => {
+				if ((to - from) * direction > 0) into.push(`M ${x} ${from} L ${x} ${to}`);
+			};
+			const carried = ends.filter(({ edge }) => !edge.dotted);
+			const solidTurn = reach(carried.filter(({ edge }) => !edge.tooling));
+			const toolingTurn = reach(carried);
+			segment(start, solidTurn, solid);
+			segment(solidTurn, toolingTurn, tooling);
+			segment(toolingTurn, reach(ends), dotted);
+			heads.push(head(m, x, start, direction === 1 ? -1 : 1, carried.length === 0 ? 0.6 : 1));
 		}
 		const line = solid.join(' ');
 		return {
@@ -328,6 +340,7 @@ export function buildQueueGraph(
 			label: laneLabel(repo),
 			x,
 			line,
+			toolingLine: tooling.join(' '),
 			dottedLine: dotted.join(' '),
 			heads: heads.join(' '),
 			// Only solid lines: under dots, a halo would fill the gaps between them.

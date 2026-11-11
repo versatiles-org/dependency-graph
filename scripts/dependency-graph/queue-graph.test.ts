@@ -133,6 +133,51 @@ describe('buildQueueGraph', () => {
 		expect(lane.halo).not.toContain(lane.edges[0].line);
 	});
 
+	describe('with tooling lines joining a lane', () => {
+		const tooling = { section: 'devDependencies', tooling: true };
+		const y = (graph: ReturnType<typeof buildQueueGraph>, repo: string) =>
+			graph.rows.find((row) => row.repo === repo)!.y;
+
+		it('dots the whole lane when only tooling is behind on it', () => {
+			const graph = buildQueueGraph(
+				[
+					entry(1, 'tool', usage('tool', 'x')),
+					entry(2, 'a', usage('a', 'tool', tooling)),
+					entry(3, 'b', usage('b', 'tool', tooling)),
+				],
+				{},
+			);
+			const lane = graph.lanes.find((each) => each.repo === 'tool')!;
+			expect(lane.line).toBe('');
+			expect(lane.toolingLine).toBe(
+				`M ${lane.x} ${y(graph, 'tool') + 18} L ${lane.x} ${y(graph, 'b') - 14}`,
+			);
+			expect(lane.dottedLine).toBe('');
+			expect(lane.halo).toBe('');
+			expect(lane.color).not.toBeNull();
+		});
+
+		it('keeps the lane solid as far as a line that ships joins it, and dots it after that', () => {
+			const graph = buildQueueGraph(
+				[
+					entry(1, 'tool', usage('tool', 'x')),
+					entry(2, 'a', usage('a', 'tool')),
+					entry(3, 'b', usage('b', 'tool', tooling)),
+					entry(4, 'c', usage('c', 'other')),
+				],
+				{},
+				{ c: ['tool'] },
+			);
+			const lane = graph.lanes.find((each) => each.repo === 'tool')!;
+			const [tool, a, b, c] = ['tool', 'a', 'b', 'c'].map((repo) => y(graph, repo));
+			expect(lane.line).toBe(`M ${lane.x} ${tool + 18} L ${lane.x} ${a - 14}`);
+			expect(lane.toolingLine).toBe(`M ${lane.x} ${a - 14} L ${lane.x} ${b - 14}`);
+			expect(lane.dottedLine).toBe(`M ${lane.x} ${b - 14} L ${lane.x} ${c - 14}`);
+			expect(lane.halo).toContain(lane.line);
+			expect(lane.halo).not.toContain(lane.toolingLine);
+		});
+	});
+
 	it('makes room for every usage in a row, and spreads them around its centre', () => {
 		const { rows } = buildQueueGraph(queue, {});
 		const choro = rows.find((row) => row.repo === 'choro')!;

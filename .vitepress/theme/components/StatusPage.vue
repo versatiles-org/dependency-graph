@@ -599,6 +599,11 @@ const laneColor = (index: number): string => {
 									<path v-if="lane.halo" class="lane-halo" :d="lane.halo" />
 									<path v-if="lane.line" class="lane-line" :d="lane.line" />
 									<path
+										v-if="lane.toolingLine"
+										class="lane-line tooling"
+										:d="lane.toolingLine"
+									/>
+									<path
 										v-if="lane.dottedLine"
 										class="lane-line dotted"
 										:d="lane.dottedLine"
