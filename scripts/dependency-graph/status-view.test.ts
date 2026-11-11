@@ -198,11 +198,19 @@ describe('filterDeployments', () => {
 describe('waitingOn', () => {
 	// Only who uses whom matters here.
 	const report = (
-		uses: [string, string][],
+		uses: [string, string, boolean?][],
 		queue: [string, string[]][],
 	): Pick<DriftReport, 'packages' | 'dependents'> =>
 		({
-			packages: [{ usages: uses.map(([consumer, provider]) => ({ consumer, provider })) }],
+			packages: [
+				{
+					usages: uses.map(([consumer, provider, tooling = false]) => ({
+						consumer,
+						provider,
+						tooling,
+					})),
+				},
+			],
 			dependents: queue.map(([consumer, behind]) => ({
 				consumer,
 				outdated: behind.map((provider) => ({ consumer, provider })),
@@ -229,14 +237,45 @@ describe('waitingOn', () => {
 		['helper', 'server'],
 	];
 
+	/** Waits that ship. */
+	const waits = (...providers: string[]) =>
+		providers.map((provider) => ({ provider, tooling: false }));
+
 	it('finds the repositories in the queue a repository uses without being behind on them', () => {
 		expect(waitingOn(report(uses, queue))).toEqual({
-			server: ['container'],
+			server: waits('container'),
 			// One reached through a repository outside the queue counts as well.
-			tools: ['server', 'svelte'],
+			tools: waits('server', 'svelte'),
 			// What server waits for is for server to show.
-			frontend: ['server'],
+			frontend: waits('server'),
 		});
+	});
+
+	it('says which waits only development tooling leads to', () => {
+		const tooling = (consumer: string, provider: string): [string, string, boolean] => [
+			consumer,
+			provider,
+			true,
+		];
+		const result = waitingOn(
+			report(
+				[
+					...uses.filter(([consumer]) => consumer !== 'tools'),
+					tooling('tools', 'svelte'),
+					// The direct way to server is tooling, but the one through helper ships.
+					tooling('tools', 'server'),
+					['tools', 'helper'],
+					['helper', 'server'],
+				],
+				queue.filter(([consumer]) => consumer !== 'tools').concat([['tools', ['x']]]),
+			),
+		);
+		expect(result.tools).toEqual([
+			{ provider: 'server', tooling: false },
+			{ provider: 'svelte', tooling: true },
+		]);
+		// Usages that ship lead from frontend to server.
+		expect(result.frontend).toEqual(waits('server'));
 	});
 
 	it('leaves out anything outside the queue', () => {
@@ -254,7 +293,7 @@ describe('waitingOn', () => {
 				['b', ['x']],
 			],
 		);
-		expect(waitingOn(cycle)).toEqual({ a: ['b'], b: ['a'] });
+		expect(waitingOn(cycle)).toEqual({ a: waits('b'), b: waits('a') });
 	});
 });
 

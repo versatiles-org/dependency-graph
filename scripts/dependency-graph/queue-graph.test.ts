@@ -29,6 +29,10 @@ const entry = (position: number, consumer: string, ...outdated: OutdatedUsage[])
 	outdated,
 });
 
+/** What `waitingOn` returns for repositories that ship. */
+const waits = (...providers: string[]) =>
+	providers.map((provider) => ({ provider, tooling: false }));
+
 describe('laneLabel', () => {
 	it('shortens a repository to what sets it apart', () => {
 		expect(laneLabel('versatiles-style')).toBe('style');
@@ -152,7 +156,8 @@ describe('buildQueueGraph', () => {
 			expect(lane.toolingLine).toBe(
 				`M ${lane.x} ${y(graph, 'tool') + 18} L ${lane.x} ${y(graph, 'b') - 14}`,
 			);
-			expect(lane.dottedLine).toBe('');
+			expect(lane.waitingLine).toBe('');
+			expect(lane.waitingToolingLine).toBe('');
 			expect(lane.halo).toBe('');
 			expect(lane.color).not.toBeNull();
 		});
@@ -166,7 +171,7 @@ describe('buildQueueGraph', () => {
 					entry(4, 'c', usage('c', 'other')),
 				],
 				{},
-				{ c: ['tool'] },
+				{ c: waits('tool') },
 			);
 			const lane = graph.lanes.find((each) => each.repo === 'tool')!;
 			const tool = y(graph, 'tool');
@@ -177,7 +182,7 @@ describe('buildQueueGraph', () => {
 			expect(c).toBe(y(graph, 'c') + WIDE.detailHeight / 2);
 			expect(lane.line).toBe(`M ${lane.x} ${tool + 18} L ${lane.x} ${a - 14}`);
 			expect(lane.toolingLine).toBe(`M ${lane.x} ${a - 14} L ${lane.x} ${b - 14}`);
-			expect(lane.dottedLine).toBe(`M ${lane.x} ${b - 14} L ${lane.x} ${c - 14}`);
+			expect(lane.waitingLine).toBe(`M ${lane.x} ${b - 14} L ${lane.x} ${c - 14}`);
 			expect(lane.halo).toContain(lane.line);
 			expect(lane.halo).not.toContain(lane.toolingLine);
 		});
@@ -216,7 +221,7 @@ describe('buildQueueGraph', () => {
 		const { rows } = buildQueueGraph(
 			[entry(1, 'a', usage('a', 'x')), entry(2, 'b', usage('b', 'x'))],
 			{},
-			{ b: ['a'] },
+			{ b: waits('a') },
 		);
 		const b = rows.find((row) => row.repo === 'b')!;
 		expect(b.height).toBe(WIDE.rowBase + 2 * WIDE.detailHeight);
@@ -288,7 +293,7 @@ describe('buildQueueGraph', () => {
 			entry(3, 'tools', usage('tools', 'container')),
 		];
 
-		it('connects it to the lane of the other with a dotted line', () => {
+		it('connects it to the lane of the other with a thin line', () => {
 			const graph = buildQueueGraph(
 				[
 					entry(1, 'container', usage('container', 'x')),
@@ -296,29 +301,29 @@ describe('buildQueueGraph', () => {
 					entry(3, 'tools', usage('tools', 'style')),
 				],
 				{},
-				{ tools: ['container'] },
+				{ tools: waits('container') },
 			);
 			const lane = graph.lanes.find((each) => each.repo === 'container')!;
-			expect(lane.edges.map((edge) => [edge.consumer, edge.dotted])).toEqual([
+			expect(lane.edges.map((edge) => [edge.consumer, edge.waiting])).toEqual([
 				['server', false],
 				['tools', true],
 			]);
 			expect(lane.color).not.toBeNull();
-			// The lane is solid as far as a solid line joins it, and dotted after that.
+			// The lane is thick as far as a line that is behind joins it, and thin after that.
 			const y = (repo: string) => graph.rows.find((row) => row.repo === repo)!.y;
 			const [container, server] = ['container', 'server'].map(y);
 			// What tools only waits for gets a line of its own, after its usage.
 			const tools = lane.edges[1].y;
 			expect(tools).toBe(y('tools') + WIDE.detailHeight / 2);
 			expect(lane.line).toBe(`M ${lane.x} ${container + 18} L ${lane.x} ${server - 14}`);
-			expect(lane.dottedLine).toBe(`M ${lane.x} ${server - 14} L ${lane.x} ${tools - 14}`);
-			// Only solid lines are highlighted.
+			expect(lane.waitingLine).toBe(`M ${lane.x} ${server - 14} L ${lane.x} ${tools - 14}`);
+			// Only lines that are behind are highlighted.
 			expect(lane.halo).toContain(lane.edges[0].line);
 			expect(lane.halo).not.toContain(lane.edges[1].line);
 		});
 
-		it('gives a lane with only dotted lines no colour, and keeps the others in theirs', () => {
-			const graph = buildQueueGraph(waiting.slice(0, 2), {}, { server: ['container'] });
+		it('gives a lane with only waiting lines no colour, and keeps the others in theirs', () => {
+			const graph = buildQueueGraph(waiting.slice(0, 2), {}, { server: waits('container') });
 			expect(graph.lanes.map((lane) => [lane.repo, lane.color])).toEqual([
 				['x', 0],
 				['container', null],
@@ -328,14 +333,40 @@ describe('buildQueueGraph', () => {
 			const container = graph.rows.find((row) => row.repo === 'container')!.y;
 			const server = lane.edges[0].y;
 			expect(lane.line).toBe('');
-			expect(lane.dottedLine).toBe(`M ${lane.x} ${container + 18} L ${lane.x} ${server - 14}`);
+			expect(lane.waitingLine).toBe(`M ${lane.x} ${container + 18} L ${lane.x} ${server - 14}`);
 			expect(lane.halo).toBe('');
 			// A smaller arrowhead, to suit the thin lines.
 			expect(lane.heads).toContain(`L ${lane.x} ${container + 18 - 5.4} `);
 		});
 
+		it('dots a waiting line that only tooling leads to, and its part of the lane', () => {
+			const graph = buildQueueGraph(
+				waiting.slice(0, 3),
+				{},
+				{
+					server: [{ provider: 'container', tooling: true }],
+				},
+			);
+			const lane = graph.lanes.find((each) => each.repo === 'container')!;
+			const server = lane.edges.find((edge) => edge.consumer === 'server')!;
+			expect([server.waiting, server.tooling]).toEqual([true, true]);
+			// tools is behind on container, which ships, so the lane is thick that far.
+			const tools = lane.edges.find((edge) => edge.consumer === 'tools')!;
+			expect([tools.waiting, tools.tooling]).toEqual([false, false]);
+			expect(lane.waitingToolingLine).toBe('');
+			const alone = buildQueueGraph(
+				waiting.slice(0, 2),
+				{},
+				{
+					server: [{ provider: 'container', tooling: true }],
+				},
+			).lanes[1];
+			expect(alone.waitingLine).toBe('');
+			expect(alone.waitingToolingLine).not.toBe('');
+		});
+
 		it('ignores a repository that is not shown', () => {
-			const graph = buildQueueGraph(waiting.slice(1, 2), {}, { server: ['container'] });
+			const graph = buildQueueGraph(waiting.slice(1, 2), {}, { server: waits('container') });
 			expect(graph.lanes.map((lane) => lane.repo)).toEqual(['style']);
 		});
 	});

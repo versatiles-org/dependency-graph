@@ -294,7 +294,7 @@ const togglePin = (repo: string): void => {
 
 /** The first package ends up on top: later ones are painted first, each halo under its lines. */
 const paintOrder = computed(() => [...graph.value.lanes].reverse());
-/** A lane with only dotted lines is grey. */
+/** A lane with only waiting lines is grey. */
 const laneColored = (index: number): boolean => graph.value.lanes[index]?.color != null;
 const laneColor = (index: number): string => {
 	const color = graph.value.lanes[index]?.color ?? null;
@@ -416,7 +416,7 @@ const laneColor = (index: number): string => {
 						</li>
 						<li>
 							<svg width="32" height="8" viewBox="0 0 32 8" aria-hidden="true">
-								<path d="M 2 4 L 30 4" class="graph-key-dots" />
+								<path d="M 2 4 L 30 4" class="graph-key-waiting" />
 							</svg>
 							Not behind yet, but will be once that one is released
 						</li>
@@ -616,9 +616,14 @@ const laneColor = (index: number): string => {
 										:d="lane.toolingLine"
 									/>
 									<path
-										v-if="lane.dottedLine"
-										class="lane-line dotted"
-										:d="lane.dottedLine"
+										v-if="lane.waitingLine"
+										class="lane-line waiting"
+										:d="lane.waitingLine"
+									/>
+									<path
+										v-if="lane.waitingToolingLine"
+										class="lane-line waiting tooling"
+										:d="lane.waitingToolingLine"
 									/>
 									<path class="lane-head" :d="lane.heads" />
 									<path
@@ -627,7 +632,7 @@ const laneColor = (index: number): string => {
 										class="lane-line"
 										:class="{
 											tooling: edge.tooling,
-											dotted: edge.dotted,
+											waiting: edge.waiting,
 											faint: !edgeLit(edge),
 										}"
 										:d="edge.line"
@@ -1402,12 +1407,12 @@ thead th {
 	stroke-dasharray: 0 5;
 }
 
-.graph-key-dots {
+/* Thin, as a line that waits. */
+.graph-key-waiting {
 	fill: none;
 	stroke: var(--vp-c-text-2);
 	stroke-linecap: round;
 	stroke-width: 1.5;
-	stroke-dasharray: 0 5;
 }
 
 .graph {
@@ -1599,17 +1604,15 @@ thead th {
 	stroke-width: 3;
 
 	/*
-	 * Round dots as wide as a solid line, far apart: unlike dashes they cannot be
-	 * mistaken for a solid line, and unlike the thin, close dots below they still
-	 * carry the lane's weight.
+	 * Thickness says whether it is behind now or only waits; round dots say it is
+	 * only development tooling. Unlike dashes, dots cannot be mistaken for a line.
 	 */
 	&.tooling {
 		stroke-dasharray: 0 5;
 	}
 
-	&.dotted {
+	&.waiting {
 		stroke-width: 1.5;
-		stroke-dasharray: 0 5;
 	}
 }
 
@@ -1674,7 +1677,7 @@ thead th {
 	stroke-width: 7;
 }
 
-.narrow .lane-line:not(.dotted) {
+.narrow .lane-line:not(.waiting) {
 	stroke-width: 2.5;
 }
 

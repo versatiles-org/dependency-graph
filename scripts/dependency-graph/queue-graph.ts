@@ -5,19 +5,21 @@
  * own row. A repository connects to a lane with a line along its row that bends
  * up into the lane with a quarter of a circle, so a line that does not bend is
  * only passing. Each line starts at a dot of its own, in its lane's colour and
- * level with the usage it stands for, so the lines of one row never share a path. Rows keep the update order, so lines point upwards: what a
- * repository depends on is further up. A cycle is the one exception, and bends
- * downwards instead.
+ * level with the usage it stands for, so the lines of one row never share a
+ * path. Rows keep the update order, so lines point upwards: what a repository
+ * depends on is further up. A cycle is the one exception, and bends downwards
+ * instead.
  *
- * A repository in the queue that others use without being behind on it yet gets
- * a lane as well, in grey and with thin dotted lines: they will be behind once it
- * is released, which is why it comes first.
+ * Two things are told apart, independently: a thick line is behind now, a thin
+ * one waits, and will be behind once its package is released; dots mean only
+ * development tooling, which never reaches released code. A repository in the
+ * queue that others only wait for gets a lane as well, in grey.
  *
  * It runs in the browser, so it may only import types from `drift.ts`.
  */
 
 import type { OutdatedUsage } from './drift';
-import type { QueueEntry } from './status-view';
+import type { QueueEntry, Wait } from './status-view';
 
 /** The sizes of a layout, which the page reads as well. */
 export interface GraphMetrics {
@@ -157,32 +159,34 @@ export interface GraphEdge {
 	x: number;
 	y: number;
 	/**
-	 * Only development tooling is behind, which never reaches released code.
-	 * Drawn as widely spaced dots.
+	 * Only development tooling is behind, or waits, which never reaches released
+	 * code. Drawn as dots.
 	 */
 	tooling: boolean;
-	/** Nothing is behind yet, but will be once the provider is released. */
-	dotted: boolean;
+	/** Nothing is behind yet, but will be once the provider is released. Drawn thin. */
+	waiting: boolean;
 }
 
 export interface GraphLane {
 	repo: string;
 	/** Place from the left. */
 	index: number;
-	/** Colour index, or null for a lane with only dotted lines. */
+	/** Colour index, or null for a lane with only waiting lines. */
 	color: number | null;
 	label: string;
 	x: number;
-	/** The line of the lane itself, as far as solid lines join it. */
-	line: string;
 	/**
-	 * Where it goes on with only tooling and dotted lines joining it, as far as
-	 * tooling lines do. Drawn in the same widely spaced dots as those lines, so a
-	 * lane only tooling is behind on looks like that all the way.
+	 * The lane itself, in four parts. Each is drawn like the lines it leads to,
+	 * and goes as far as the last of them: so a lane only tooling is behind on is
+	 * dotted all the way. First as far as lines that are behind and ship join it.
 	 */
+	line: string;
+	/** Then as far as lines that are behind on tooling join it. */
 	toolingLine: string;
-	/** Where it goes on with only dotted lines joining it. */
-	dottedLine: string;
+	/** Then as far as waiting lines that ship join it. */
+	waitingLine: string;
+	/** Then as far as waiting lines on tooling join it. */
+	waitingToolingLine: string;
 	/** The arrowheads pointing at its node. */
 	heads: string;
 	/** The solid lines of the lane as one path, so that it does not darken where they meet. */
@@ -214,7 +218,7 @@ export function laneLabel(repo: string): string {
 export function buildQueueGraph(
 	queue: QueueEntry[],
 	publishes: Record<string, string[]>,
-	waiting: Record<string, string[]> = {},
+	waiting: Record<string, Wait[]> = {},
 	metrics: GraphMetrics = WIDE,
 ): QueueGraph {
 	const m = metrics;
@@ -222,8 +226,8 @@ export function buildQueueGraph(
 		top + (m.nodeTop === null ? height / 2 : m.nodeTop);
 	// Only what is shown can be waited for.
 	const shown = new Set(queue.map((entry) => entry.consumer));
-	const waitsFor = (entry: QueueEntry): string[] =>
-		(waiting[entry.consumer] ?? []).filter((repo) => shown.has(repo));
+	const waitsFor = (entry: QueueEntry): Wait[] =>
+		(waiting[entry.consumer] ?? []).filter((wait) => shown.has(wait.provider));
 
 	// A lane comes in the order it is first needed, so one that ends early does not
 	// have to be passed by what comes after it.
@@ -231,7 +235,10 @@ export function buildQueueGraph(
 		...new Set(
 			queue.flatMap((entry) =>
 				[
-					...new Set([...entry.outdated.map((usage) => usage.provider), ...waitsFor(entry)]),
+					...new Set([
+						...entry.outdated.map((usage) => usage.provider),
+						...waitsFor(entry).map((wait) => wait.provider),
+					]),
 				].sort((a, b) => a.localeCompare(b)),
 			),
 		),
@@ -278,6 +285,7 @@ export function buildQueueGraph(
 		// What it only waits for gets a line of its own, after what it is behind on.
 		const behind = new Set(entry.outdated.map((usage) => usage.provider));
 		const waits = waitsFor(entry)
+			.map((wait) => wait.provider)
 			.filter((repo) => !behind.has(repo))
 			.sort((a, b) => laneIndex.get(a)! - laneIndex.get(b)!);
 		const slots = entry.outdated.length + waits.length;
@@ -324,8 +332,8 @@ export function buildQueueGraph(
 		// Several packages of one repository still make one line to its lane.
 		const edges = queue.flatMap((entry): GraphEdge[] => {
 			const usages = entry.outdated.filter((usage) => usage.provider === repo);
-			const waits = waitsFor(entry).includes(repo);
-			if (usages.length === 0 && !waits) return [];
+			const wait = waitsFor(entry).find((each) => each.provider === repo);
+			if (usages.length === 0 && !wait) return [];
 			const row = rowOf.get(entry.consumer)!;
 			const slot =
 				row.details.find((detail) => detail.provider === repo)?.y ??
@@ -337,15 +345,15 @@ export function buildQueueGraph(
 					provider: repo,
 					line: edgeLine(from.x, x, from.y, own.y, m.curve),
 					...from,
-					tooling: usages.length > 0 && usages.every((usage) => usage.tooling),
-					dotted: usages.length === 0,
+					tooling: usages.length > 0 ? usages.every((usage) => usage.tooling) : wait!.tooling,
+					waiting: usages.length === 0,
 				},
 			];
 		});
 
-		const solid: string[] = [];
-		const tooling: string[] = [];
-		const dotted: string[] = [];
+		// Strongest first: behind and shipping, behind on tooling, waiting, waiting on tooling.
+		const parts: string[][] = [[], [], [], []];
+		const strength = (edge: GraphEdge): number => (edge.waiting ? 2 : 0) + (edge.tooling ? 1 : 0);
 		const heads: string[] = [];
 		// Only a cycle has lines from above its own row.
 		for (const direction of [1, -1] as const) {
@@ -361,15 +369,18 @@ export function buildQueueGraph(
 			const segment = (from: number, to: number, into: string[]): void => {
 				if ((to - from) * direction > 0) into.push(`M ${x} ${from} L ${x} ${to}`);
 			};
-			const carried = ends.filter(({ edge }) => !edge.dotted);
-			const solidTurn = reach(carried.filter(({ edge }) => !edge.tooling));
-			const toolingTurn = reach(carried);
-			segment(start, solidTurn, solid);
-			segment(solidTurn, toolingTurn, tooling);
-			segment(toolingTurn, reach(ends), dotted);
-			heads.push(head(m, x, start, direction === 1 ? -1 : 1, carried.length === 0 ? 0.6 : 1));
+			let from = start;
+			parts.forEach((part, rank) => {
+				const to = reach(ends.filter(({ edge }) => strength(edge) <= rank));
+				segment(from, to, part);
+				if ((to - from) * direction > 0) from = to;
+			});
+			const behind = ends.some(({ edge }) => !edge.waiting);
+			heads.push(head(m, x, start, direction === 1 ? -1 : 1, behind ? 1 : 0.6));
 		}
-		const line = solid.join(' ');
+		const [line, toolingLine, waitingLine, waitingToolingLine] = parts.map((part) =>
+			part.join(' '),
+		);
 		return {
 			repo,
 			index,
@@ -377,14 +388,12 @@ export function buildQueueGraph(
 			label: laneLabel(repo),
 			x,
 			line,
-			toolingLine: tooling.join(' '),
-			dottedLine: dotted.join(' '),
+			toolingLine,
+			waitingLine,
+			waitingToolingLine,
 			heads: heads.join(' '),
-			// Only solid lines: under dots, a halo would fill the gaps between them.
-			halo: [
-				line,
-				...edges.filter((edge) => !edge.dotted && !edge.tooling).map((edge) => edge.line),
-			]
+			// Only what is behind and ships: under dots, a halo would fill the gaps between them.
+			halo: [line, ...edges.filter((edge) => strength(edge) === 0).map((edge) => edge.line)]
 				.filter(Boolean)
 				.join(' '),
 			edges,

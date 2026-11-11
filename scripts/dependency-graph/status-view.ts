@@ -98,39 +98,65 @@ export interface QueueEntry extends DependentReport {
 	position: number;
 }
 
+/** A repository in the queue that another one waits for. */
+export interface Wait {
+	provider: string;
+	/**
+	 * Whether every way it is used is development tooling, so that its release
+	 * never reaches the released code of the one waiting.
+	 */
+	tooling: boolean;
+}
+
 /**
  * What each repository in the queue waits for without being behind on it yet:
  * the others in the queue whose packages it uses, directly or through
  * repositories outside the queue. They come before it, and it will be behind on
  * them as soon as they are released. Like the update order, it counts every
- * usage, development dependencies included.
+ * usage, development tooling included, and says which waits only tooling leads to.
  */
 export function waitingOn(
 	report: Pick<DriftReport, 'packages' | 'dependents'>,
-): Record<string, string[]> {
-	const providers = new Map<string, Set<string>>();
-	for (const { consumer, provider } of report.packages.flatMap((entry) => entry.usages)) {
-		if (!providers.has(consumer)) providers.set(consumer, new Set());
-		providers.get(consumer)!.add(provider);
-	}
-
+): Record<string, Wait[]> {
+	const usages = report.packages.flatMap((entry) => entry.usages);
 	const queued = new Set(report.dependents.map((dependent) => dependent.consumer));
-	const result: Record<string, string[]> = {};
-	for (const { consumer, outdated } of report.dependents) {
-		const behind = new Set(outdated.map((usage) => usage.provider));
-		const found = new Set<string>();
-		const seen = new Set([consumer]);
-		const open = [consumer];
-		while (open.length > 0) {
-			for (const provider of providers.get(open.pop()!) ?? []) {
-				if (seen.has(provider)) continue;
-				seen.add(provider);
-				// One in the queue stands for everything behind it.
-				if (!queued.has(provider)) open.push(provider);
-				else if (!behind.has(provider)) found.add(provider);
-			}
+
+	// What a repository in the queue reaches, following only the usages given.
+	const reach = (followed: typeof usages): Map<string, Set<string>> => {
+		const providers = new Map<string, Set<string>>();
+		for (const { consumer, provider } of followed) {
+			if (!providers.has(consumer)) providers.set(consumer, new Set());
+			providers.get(consumer)!.add(provider);
 		}
-		if (found.size > 0) result[consumer] = [...found].sort((a, b) => a.localeCompare(b));
+		const result = new Map<string, Set<string>>();
+		for (const { consumer, outdated } of report.dependents) {
+			const behind = new Set(outdated.map((usage) => usage.provider));
+			const found = new Set<string>();
+			const seen = new Set([consumer]);
+			const open = [consumer];
+			while (open.length > 0) {
+				for (const provider of providers.get(open.pop()!) ?? []) {
+					if (seen.has(provider)) continue;
+					seen.add(provider);
+					// One in the queue stands for everything behind it.
+					if (!queued.has(provider)) open.push(provider);
+					else if (!behind.has(provider)) found.add(provider);
+				}
+			}
+			result.set(consumer, found);
+		}
+		return result;
+	};
+
+	const all = reach(usages);
+	// A wait ships when a chain of usages that all ship leads to it.
+	const shipped = reach(usages.filter((usage) => !usage.tooling));
+	const result: Record<string, Wait[]> = {};
+	for (const [consumer, found] of all) {
+		if (found.size === 0) continue;
+		result[consumer] = [...found]
+			.sort((a, b) => a.localeCompare(b))
+			.map((provider) => ({ provider, tooling: !shipped.get(consumer)!.has(provider) }));
 	}
 	return result;
 }
