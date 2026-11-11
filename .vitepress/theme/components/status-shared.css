@@ -1,0 +1,62 @@
+/*
+ * Rules the status page and the graph on it both need. Each includes this file
+ * as scoped, so the rules stay as specific as they were in one component.
+ */
+
+.is-range {
+	--st-color: var(--st-range);
+}
+.is-stale-lock {
+	--st-color: var(--st-stale-lock);
+}
+.is-unknown {
+	--st-color: var(--st-unknown);
+}
+.is-ahead {
+	--st-color: var(--st-ahead);
+}
+.is-current {
+	--st-color: var(--st-current);
+}
+
+a {
+	color: var(--vp-c-brand-1);
+	text-decoration: none;
+
+	&:hover {
+		color: var(--vp-c-brand-2);
+		text-decoration: underline;
+	}
+}
+
+:is(a, button, input, summary, .scroll):focus-visible {
+	outline: 2px solid var(--vp-c-brand-1);
+	outline-offset: 2px;
+}
+
+code,
+.mono {
+	font-family: var(--vp-font-family-mono);
+	font-size: 13px;
+}
+
+.mark {
+	display: inline-block;
+	width: 1.1em;
+	color: var(--st-color);
+	font-weight: 700;
+	text-align: center;
+}
+
+.scroll {
+	overflow-x: auto;
+}
+
+.tooling {
+	margin-left: 6px;
+	padding: 0 5px;
+	border: 1px solid var(--vp-c-divider);
+	border-radius: 4px;
+	color: var(--vp-c-text-2);
+	font-size: 12px;
+}

@@ -11,8 +11,39 @@ import type {
 	Finding,
 	PackageReport,
 	PinFinding,
+	Status,
 } from './drift';
 import type { RepoStatus } from './repo-status';
+
+/** Every status has a mark as well, so colour never has to speak alone. */
+export const STATUS: Record<Status, { mark: string; label: string; one: string; many: string }> = {
+	range: {
+		mark: '✗',
+		label: 'Range excludes latest',
+		one: 'version range excludes the latest release',
+		many: 'version ranges exclude the latest release',
+	},
+	'stale-lock': {
+		mark: '↑',
+		label: 'Lockfile behind',
+		one: 'lockfile behind',
+		many: 'lockfiles behind',
+	},
+	unknown: { mark: '?', label: 'Unknown', one: 'unknown', many: 'unknown' },
+	ahead: {
+		mark: '»',
+		label: 'Ahead of latest',
+		one: 'ahead of the latest release',
+		many: 'ahead of the latest release',
+	},
+	current: { mark: '✓', label: 'Up to date', one: 'up to date', many: 'up to date' },
+};
+
+/** A repository on GitHub, or a file on its default branch. */
+export function githubUrl(org: string, repo: string, path?: string): string {
+	const url = `https://github.com/${org}/${repo}`;
+	return path === undefined ? url : `${url}/blob/HEAD/${path}`;
+}
 
 /** Scheduled runs are hours apart, so an older snapshot means they have stopped. */
 const STALE_AFTER_HOURS = 12;
