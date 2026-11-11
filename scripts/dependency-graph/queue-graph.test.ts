@@ -169,7 +169,12 @@ describe('buildQueueGraph', () => {
 				{ c: ['tool'] },
 			);
 			const lane = graph.lanes.find((each) => each.repo === 'tool')!;
-			const [tool, a, b, c] = ['tool', 'a', 'b', 'c'].map((repo) => y(graph, repo));
+			const tool = y(graph, 'tool');
+			// Where each line arrives at the lane: c's comes after its usage, so it is lower.
+			const [a, b, c] = ['a', 'b', 'c'].map(
+				(repo) => lane.edges.find((edge) => edge.consumer === repo)!.y,
+			);
+			expect(c).toBe(y(graph, 'c') + WIDE.detailHeight / 2);
 			expect(lane.line).toBe(`M ${lane.x} ${tool + 18} L ${lane.x} ${a - 14}`);
 			expect(lane.toolingLine).toBe(`M ${lane.x} ${a - 14} L ${lane.x} ${b - 14}`);
 			expect(lane.dottedLine).toBe(`M ${lane.x} ${b - 14} L ${lane.x} ${c - 14}`);
@@ -184,6 +189,40 @@ describe('buildQueueGraph', () => {
 		expect(choro.height).toBe(72);
 		expect(choro.details.map((detail) => detail.y)).toEqual([22, 50]);
 		expect(rows.find((row) => row.repo === 'server')!.details[0].y).toBe(22);
+	});
+
+	it('starts every line of a row at a dot of its own, level with its usage', () => {
+		const graph = buildQueueGraph(queue, {});
+		const choro = graph.rows.find((row) => row.repo === 'choro')!;
+		const starts = graph.lanes.flatMap((lane) =>
+			lane.edges.filter((edge) => edge.consumer === 'choro').map((edge) => [edge.x, edge.y]),
+		);
+		expect(starts).toEqual(choro.details.map((detail) => [WIDE.nodeX, choro.top + detail.y]));
+	});
+
+	it('orders the usages of a row by lane, so that its lines do not cross', () => {
+		const { rows } = buildQueueGraph(
+			[entry(1, 'a', usage('a', 'p')), entry(2, 'b', usage('b', 'q'), usage('b', 'p'))],
+			{},
+		);
+		const b = rows.find((row) => row.repo === 'b')!;
+		expect(b.details.map((detail) => [detail.provider, detail.lane])).toEqual([
+			['p', 0],
+			['q', 1],
+		]);
+	});
+
+	it('makes room for what a row only waits for, after its usages', () => {
+		const { rows } = buildQueueGraph(
+			[entry(1, 'a', usage('a', 'x')), entry(2, 'b', usage('b', 'x'))],
+			{},
+			{ b: ['a'] },
+		);
+		const b = rows.find((row) => row.repo === 'b')!;
+		expect(b.height).toBe(WIDE.rowBase + 2 * WIDE.detailHeight);
+		// One usage and one wait share the row like two usages would.
+		expect(b.details.map((detail) => detail.y)).toEqual([22]);
+		expect(b.waits).toEqual([{ y: 22 + WIDE.detailHeight, lane: 1 }]);
 	});
 
 	it('remembers which lane each usage belongs to', () => {
@@ -208,14 +247,15 @@ describe('buildQueueGraph', () => {
 			expect(stylerLane.line.startsWith(`M ${stylerLane.x} ${styler.y + 18} `)).toBe(true);
 		});
 
-		it('bends a line from a node right of the lane the other way', () => {
+		it('starts the lines of a repository with a lane of its own left of every lane', () => {
 			const graph = buildQueueGraph(chain, {});
 			const [release, styler] = graph.rows;
 			expect(release.repo).toBe('style');
-			const [style, stylerLane] = graph.lanes;
-			const line = style.edges.find((edge) => edge.consumer === 'styler')!.line;
-			expect(line).toBe(
-				`M ${stylerLane.x} ${styler.y} L ${style.x + 14} ${styler.y} A 14 14 0 0 1 ${style.x} ${styler.y - 14}`,
+			const [style] = graph.lanes;
+			const edge = style.edges.find((each) => each.consumer === 'styler')!;
+			expect([edge.x, edge.y]).toEqual([WIDE.nodeX, styler.y]);
+			expect(edge.line).toBe(
+				`M ${WIDE.nodeX} ${styler.y} L ${style.x - 14} ${styler.y} A 14 14 0 0 0 ${style.x} ${styler.y - 14}`,
 			);
 		});
 
@@ -266,7 +306,10 @@ describe('buildQueueGraph', () => {
 			expect(lane.color).not.toBeNull();
 			// The lane is solid as far as a solid line joins it, and dotted after that.
 			const y = (repo: string) => graph.rows.find((row) => row.repo === repo)!.y;
-			const [container, server, tools] = ['container', 'server', 'tools'].map(y);
+			const [container, server] = ['container', 'server'].map(y);
+			// What tools only waits for gets a line of its own, after its usage.
+			const tools = lane.edges[1].y;
+			expect(tools).toBe(y('tools') + WIDE.detailHeight / 2);
 			expect(lane.line).toBe(`M ${lane.x} ${container + 18} L ${lane.x} ${server - 14}`);
 			expect(lane.dottedLine).toBe(`M ${lane.x} ${server - 14} L ${lane.x} ${tools - 14}`);
 			// Only solid lines are highlighted.
@@ -282,8 +325,8 @@ describe('buildQueueGraph', () => {
 				['style', 1],
 			]);
 			const lane = graph.lanes[1];
-			const y = (repo: string) => graph.rows.find((row) => row.repo === repo)!.y;
-			const [container, server] = ['container', 'server'].map(y);
+			const container = graph.rows.find((row) => row.repo === 'container')!.y;
+			const server = lane.edges[0].y;
 			expect(lane.line).toBe('');
 			expect(lane.dottedLine).toBe(`M ${lane.x} ${container + 18} L ${lane.x} ${server - 14}`);
 			expect(lane.halo).toBe('');
@@ -342,10 +385,12 @@ describe('buildQueueGraph', () => {
 			const graph = narrow([entry(1, 'server', usage('server', 'style'))]);
 			const [release, server] = graph.rows;
 			const [lane] = graph.lanes;
+			// Level with its usage, below the name.
+			const y = server.top + server.details[0].y;
 			expect(lane.edges[0].line).toBe(
-				`M ${NARROW.nodeX} ${server.y} L ${lane.x - 7} ${server.y} A 7 7 0 0 0 ${lane.x} ${server.y - 7}`,
+				`M ${NARROW.nodeX} ${y} L ${lane.x - 7} ${y} A 7 7 0 0 0 ${lane.x} ${y - 7}`,
 			);
-			expect(lane.line).toBe(`M ${lane.x} ${release.y + 14} L ${lane.x} ${server.y - 7}`);
+			expect(lane.line).toBe(`M ${lane.x} ${release.y + 14} L ${lane.x} ${y - 7}`);
 			expect(lane.heads).toContain(`L ${lane.x} ${release.y + 7} `);
 		});
 	});

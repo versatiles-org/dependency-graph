@@ -580,6 +580,18 @@ const laneColor = (index: number): string => {
 										</span>
 									</template>
 								</template>
+								<span
+									v-for="wait in row.waits"
+									:key="`waits ${wait.lane}`"
+									class="row-update row-wait"
+									:style="
+										narrow
+											? { top: `${wait.y}px` }
+											: { left: `${updateLeft}px`, top: `${wait.y}px` }
+									"
+								>
+									waits for {{ graph.lanes[wait.lane].label }}
+								</span>
 							</div>
 
 							<svg
@@ -620,6 +632,15 @@ const laneColor = (index: number): string => {
 										}"
 										:d="edge.line"
 									/>
+									<circle
+										v-for="edge in lane.edges"
+										:key="`dot ${edge.consumer}`"
+										class="graph-dot"
+										:class="{ faint: !edgeLit(edge) }"
+										:cx="edge.x"
+										:cy="edge.y"
+										:r="metrics.dotRadius"
+									/>
 								</g>
 								<g
 									v-for="(row, index) in graph.rows"
@@ -628,6 +649,7 @@ const laneColor = (index: number): string => {
 									:style="{ '--row-bg': rowBackground(row, index) }"
 								>
 									<circle
+										v-if="row.lane !== null"
 										class="graph-node"
 										:cx="row.nodeX"
 										:cy="row.y"
@@ -1593,6 +1615,14 @@ thead th {
 
 .lane-head {
 	fill: var(--lane);
+}
+
+.graph-dot {
+	fill: var(--lane);
+}
+
+.row-wait {
+	color: var(--vp-c-text-3);
 }
 
 .graph-node {

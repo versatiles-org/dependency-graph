@@ -4,7 +4,8 @@
  * Every package with someone behind on it gets a vertical lane, starting at its
  * own row. A repository connects to a lane with a line along its row that bends
  * up into the lane with a quarter of a circle, so a line that does not bend is
- * only passing. Rows keep the update order, so lines point upwards: what a
+ * only passing. Each line starts at a dot of its own, in its lane's colour and
+ * level with the usage it stands for, so the lines of one row never share a path. Rows keep the update order, so lines point upwards: what a
  * repository depends on is further up. A cycle is the one exception, and bends
  * downwards instead.
  *
@@ -42,6 +43,8 @@ export interface GraphMetrics {
 	/** Height of the node within its row, or null for the middle of the row. */
 	nodeTop: number | null;
 	nodeRadius: number;
+	/** Of the dot each line of a row starts at, in the colour of that line. */
+	dotRadius: number;
 	/** Where the node of a repository without a lane of its own sits. */
 	nodeX: number;
 	firstLaneX: number;
@@ -67,6 +70,7 @@ export const WIDE: GraphMetrics = {
 	groupGap: 32,
 	nodeTop: null,
 	nodeRadius: 7,
+	dotRadius: 5,
 	nodeX: 24,
 	firstLaneX: 84,
 	laneGap: 52,
@@ -95,6 +99,7 @@ export const NARROW: GraphMetrics = {
 	groupGap: 48,
 	nodeTop: 13,
 	nodeRadius: 5,
+	dotRadius: 4,
 	nodeX: 10,
 	firstLaneX: 30,
 	laneGap: 14,
@@ -106,6 +111,14 @@ export const NARROW: GraphMetrics = {
 };
 
 export interface GraphDetail extends OutdatedUsage {
+	/** Offset of its text within the row. */
+	y: number;
+	/** The lane it connects to. */
+	lane: number;
+}
+
+/** A line for a repository the row waits for without being behind on it yet. */
+export interface GraphWait {
 	/** Offset of its text within the row. */
 	y: number;
 	/** The lane it connects to. */
@@ -126,6 +139,8 @@ export interface GraphRow {
 	lane: number | null;
 	/** One per outdated usage. */
 	details: GraphDetail[];
+	/** One per repository it waits for, after the details. */
+	waits: GraphWait[];
 	/** For a package nobody has to update itself. */
 	latest: string | null;
 	behindCount: number;
@@ -135,6 +150,12 @@ export interface GraphEdge {
 	consumer: string;
 	provider: string;
 	line: string;
+	/**
+	 * Where the line starts, with a dot of its own: level with the first usage it
+	 * stands for, so that lines of one row never share a path.
+	 */
+	x: number;
+	y: number;
 	/**
 	 * Only development tooling is behind, which never reaches released code.
 	 * Drawn as widely spaced dots.
@@ -244,6 +265,7 @@ export function buildQueueGraph(
 			nodeX: laneX(lane),
 			lane,
 			details: [],
+			waits: [],
 			latest: usages[0]?.latest ?? null,
 			behindCount: new Set(usages.map((usage) => usage.consumer)).size,
 		};
@@ -253,7 +275,13 @@ export function buildQueueGraph(
 		released.length > 0 ? m.releasesTop + released.length * m.rowHeight + 8 : m.firstLabelTop;
 	let next = queueLabelTop + m.groupGap - 8;
 	const queueRows = queue.map((entry): GraphRow => {
-		const height = Math.max(m.rowHeight, m.rowBase + entry.outdated.length * m.detailHeight);
+		// What it only waits for gets a line of its own, after what it is behind on.
+		const behind = new Set(entry.outdated.map((usage) => usage.provider));
+		const waits = waitsFor(entry)
+			.filter((repo) => !behind.has(repo))
+			.sort((a, b) => laneIndex.get(a)! - laneIndex.get(b)!);
+		const slots = entry.outdated.length + waits.length;
+		const height = Math.max(m.rowHeight, m.rowBase + slots * m.detailHeight);
 		const top = next;
 		next += height;
 		const lane = laneIndex.get(entry.consumer) ?? null;
@@ -262,7 +290,7 @@ export function buildQueueGraph(
 		const detailY = (index: number): number =>
 			m.stacked
 				? m.detailsTop + index * m.detailHeight + m.detailHeight / 4
-				: height / 2 + (index - (entry.outdated.length - 1) / 2) * m.detailHeight;
+				: height / 2 + (index - (slots - 1) / 2) * m.detailHeight;
 		return {
 			repo: entry.consumer,
 			position: entry.position,
@@ -272,10 +300,14 @@ export function buildQueueGraph(
 			y: centre(top, height),
 			nodeX: lane === null ? m.nodeX : laneX(lane),
 			lane,
-			details: entry.outdated.map((usage, index) => ({
-				...usage,
-				y: detailY(index),
-				lane: laneIndex.get(usage.provider)!,
+			// In the order of their lanes, so that no line of a row crosses another.
+			details: entry.outdated
+				.map((usage) => ({ ...usage, lane: laneIndex.get(usage.provider)! }))
+				.sort((a, b) => a.lane - b.lane)
+				.map((detail, index) => ({ ...detail, y: detailY(index) })),
+			waits: waits.map((repo, index) => ({
+				y: detailY(entry.outdated.length + index),
+				lane: laneIndex.get(repo)!,
 			})),
 			latest: null,
 			behindCount: 0,
@@ -295,11 +327,16 @@ export function buildQueueGraph(
 			const waits = waitsFor(entry).includes(repo);
 			if (usages.length === 0 && !waits) return [];
 			const row = rowOf.get(entry.consumer)!;
+			const slot =
+				row.details.find((detail) => detail.provider === repo)?.y ??
+				row.waits.find((wait) => wait.lane === index)!.y;
+			const from = { x: m.nodeX, y: row.top + slot };
 			return [
 				{
 					consumer: entry.consumer,
 					provider: repo,
-					line: edgeLine(row.nodeX, x, row.y, own.y, m.curve),
+					line: edgeLine(from.x, x, from.y, own.y, m.curve),
+					...from,
 					tooling: usages.length > 0 && usages.every((usage) => usage.tooling),
 					dotted: usages.length === 0,
 				},
@@ -313,7 +350,7 @@ export function buildQueueGraph(
 		// Only a cycle has lines from above its own row.
 		for (const direction of [1, -1] as const) {
 			const ends = edges
-				.map((edge) => ({ edge, y: rowOf.get(edge.consumer)!.y }))
+				.map((edge) => ({ edge, y: edge.y }))
 				.filter(({ y }) => (y - own.y) * direction > 0)
 				.map(({ edge, y }) => ({ edge, y: y - direction * m.curve }));
 			if (ends.length === 0) continue;
@@ -364,14 +401,15 @@ export function buildQueueGraph(
 	};
 }
 
-/** Along the row from a node, then a quarter of a circle into the lane. */
+/**
+ * Along the row from its dot, then a quarter of a circle into the lane. Every
+ * line starts left of every lane, so it only bends up or, in a cycle, down.
+ */
 function edgeLine(fromX: number, laneX: number, y: number, laneY: number, curve: number): string {
-	const right = laneX > fromX;
 	const up = laneY < y;
-	const sweep = right === up ? 0 : 1;
-	const beforeLane = right ? laneX - curve : laneX + curve;
+	const sweep = up ? 0 : 1;
 	const onLane = up ? y - curve : y + curve;
-	return `M ${fromX} ${y} L ${beforeLane} ${y} A ${curve} ${curve} 0 0 ${sweep} ${laneX} ${onLane}`;
+	return `M ${fromX} ${y} L ${laneX - curve} ${y} A ${curve} ${curve} 0 0 ${sweep} ${laneX} ${onLane}`;
 }
 
 /** An arrowhead with its base at `y`, pointing up (-1) or down (1) along a lane. */
