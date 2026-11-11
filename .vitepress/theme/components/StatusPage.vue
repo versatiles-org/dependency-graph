@@ -590,7 +590,7 @@ const laneColor = (index: number): string => {
 											: { left: `${updateLeft}px`, top: `${wait.y}px` }
 									"
 								>
-									waits for {{ graph.lanes[wait.lane].label }}
+									after {{ graph.lanes[wait.lane].label }} is released
 								</span>
 							</div>
 
