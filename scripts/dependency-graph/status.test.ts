@@ -12,6 +12,7 @@ const usage = (consumer: string): Usage => ({
 	consumer,
 	path: 'package.json',
 	section: 'dependencies',
+	tooling: false,
 	requested: '^6.0.1',
 	installed: '6.0.1',
 	lockPath: 'package-lock.json',

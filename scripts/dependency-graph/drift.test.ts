@@ -11,6 +11,7 @@ import {
 	collectPins,
 	findUsages,
 	imageTagsUrl,
+	isTooling,
 	lockCandidates,
 	lockedVersion,
 	manifestVersions,
@@ -46,6 +47,7 @@ function usage(overrides: Partial<Usage> = {}): Usage {
 		consumer: 'versatiles-frontend',
 		path: 'package.json',
 		section: 'dependencies',
+		tooling: false,
 		requested: '^6.0.1',
 		installed: '6.0.1',
 		lockPath: 'package-lock.json',
@@ -73,6 +75,28 @@ describe('findUsages', () => {
 		expect(found).toEqual([
 			'versatiles-frontend dependencies ^6.0.1',
 			'versatiles-frontend devDependencies ^6.0.1',
+		]);
+	});
+
+	it('marks development dependencies as tooling only for the packages named as tooling', () => {
+		const files = [
+			file('versatiles-style', 'package.json', pkg('@versatiles/style')),
+			file('node-release-tool', 'package.json', pkg('@versatiles/release-tool')),
+			file(
+				'versatiles-frontend',
+				'package.json',
+				pkg('versatiles-frontend', {
+					devDependencies: { '@versatiles/style': '^6.0.1', '@versatiles/release-tool': '^2' },
+				}),
+			),
+		];
+		const { maps } = buildNameMaps(files);
+		const tooling = (names: string[]) =>
+			findUsages(files, maps, new Set(names)).map((u) => `${u.name} ${u.tooling}`);
+		expect(tooling([])).toEqual(['@versatiles/style false', '@versatiles/release-tool false']);
+		expect(tooling(['@versatiles/release-tool'])).toEqual([
+			'@versatiles/style false',
+			'@versatiles/release-tool true',
 		]);
 	});
 
@@ -115,6 +139,28 @@ describe('findUsages', () => {
 			section: 'workspace.dependencies',
 			requested: '4.12.2',
 		});
+	});
+});
+
+describe('isTooling', () => {
+	const tooling = new Set(['@versatiles/release-tool']);
+
+	it('counts an npm package as tooling only as a development dependency, and only if named', () => {
+		expect(isTooling('npm', '@versatiles/release-tool', 'devDependencies', tooling)).toBe(true);
+		expect(isTooling('npm', '@versatiles/release-tool', 'dependencies', tooling)).toBe(false);
+		// Bundled code lives in devDependencies too, so an unnamed package ships.
+		expect(isTooling('npm', '@versatiles/style', 'devDependencies', tooling)).toBe(false);
+		expect(isTooling('npm', '@versatiles/style', 'peerDependencies', tooling)).toBe(false);
+	});
+
+	it('counts every Cargo development dependency as tooling, wherever the table sits', () => {
+		expect(isTooling('cargo', 'versatiles_core', 'dev-dependencies')).toBe(true);
+		expect(isTooling('cargo', 'versatiles_core', "target.'cfg(unix)'.dev-dependencies")).toBe(
+			true,
+		);
+		expect(isTooling('cargo', 'versatiles_core', 'dependencies')).toBe(false);
+		expect(isTooling('cargo', 'versatiles_core', 'workspace.dependencies')).toBe(false);
+		expect(isTooling('cargo', 'versatiles_core', 'build-dependencies')).toBe(false);
 	});
 });
 
@@ -905,7 +951,10 @@ describe('renderDrift', () => {
 			assess(usage({ consumer: 'a', installed: '6.0.3' }), style),
 			assess(usage({ consumer: 'b', path: 'web/package.json' }), style),
 			assess(usage({ consumer: 'b', requested: '^5.0.0', installed: '5.0.0' }), style),
-			assess({ ...core, consumer: 'b', section: 'devDependencies' }, release('6.1.0')),
+			assess(
+				{ ...core, consumer: 'b', section: 'devDependencies', tooling: true },
+				release('6.1.0'),
+			),
 			assess({ ...core, consumer: 'c', installed: '7.0.0' }, release('6.1.0')),
 		];
 		const releases = new Map([
@@ -919,9 +968,9 @@ describe('renderDrift', () => {
 		const section = report.split('after the repositories it builds on\n\n')[1].split('\n');
 		expect(section.slice(0, 5)).toEqual([
 			'b  3 outdated',
-			'  ✗  @versatiles/style         5.0.0 → 6.0.3  ^5.0.0       major behind, range excludes latest',
-			'  ↑  @versatiles/core          6.0.1 → 6.1.0  ^6.0.1  dev  minor behind, range admits latest, lockfile is behind',
-			'  ↑  @versatiles/style in web  6.0.1 → 6.0.3  ^6.0.1       patch behind, range admits latest, lockfile is behind',
+			'  ✗  @versatiles/style         5.0.0 → 6.0.3  ^5.0.0           major behind, range excludes latest',
+			'  ↑  @versatiles/core          6.0.1 → 6.1.0  ^6.0.1  tooling  minor behind, range admits latest, lockfile is behind',
+			'  ↑  @versatiles/style in web  6.0.1 → 6.0.3  ^6.0.1           patch behind, range admits latest, lockfile is behind',
 			'',
 		]);
 		// a is current and c is ahead: neither has anything to update.

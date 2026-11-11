@@ -11,6 +11,7 @@ const usage = (consumer: string, provider: string, overrides: Partial<OutdatedUs
 		consumer,
 		path: 'package.json',
 		section: 'dependencies',
+		tooling: false,
 		requested: '^1.0.0',
 		installed: '1.0.0',
 		lockPath: 'package-lock.json',
@@ -113,20 +114,22 @@ describe('buildQueueGraph', () => {
 		expect(graph.rows[1].details).toHaveLength(2);
 	});
 
-	it('marks a line as development only when everything on it is a development dependency', () => {
-		const dev = { section: 'devDependencies' };
+	it('marks a line as tooling only when everything on it is development tooling', () => {
+		const tooling = { section: 'devDependencies', tooling: true };
 		const lines = (...usages: OutdatedUsage[]) =>
-			buildQueueGraph([entry(1, 'a', ...usages)], {}).lanes[0].edges[0].dev;
-		expect(lines(usage('a', 'p', dev))).toBe(true);
-		expect(lines(usage('a', 'p', dev), usage('a', 'p', { name: 'other' }))).toBe(false);
+			buildQueueGraph([entry(1, 'a', ...usages)], {}).lanes[0].edges[0].tooling;
+		expect(lines(usage('a', 'p', tooling))).toBe(true);
+		expect(lines(usage('a', 'p', tooling), usage('a', 'p', { name: 'other' }))).toBe(false);
+		// A development dependency that is bundled ships, so its line stays solid.
+		expect(lines(usage('a', 'p', { section: 'devDependencies' }))).toBe(false);
 	});
 
-	it('gives a development line no halo, which would fill the gaps between its dots', () => {
+	it('gives a tooling line no halo, which would fill the gaps between its dots', () => {
 		const [lane] = buildQueueGraph(
-			[entry(1, 'a', usage('a', 'p', { section: 'devDependencies' }))],
+			[entry(1, 'a', usage('a', 'p', { section: 'devDependencies', tooling: true }))],
 			{},
 		).lanes;
-		expect(lane.edges[0].dev).toBe(true);
+		expect(lane.edges[0].tooling).toBe(true);
 		expect(lane.halo).not.toContain(lane.edges[0].line);
 	});
 

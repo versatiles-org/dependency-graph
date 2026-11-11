@@ -27,7 +27,7 @@ import { dirname, posix } from 'path';
 import { styleText } from 'util';
 import semver from 'semver';
 import type { NameMaps, RepoFile } from './collect';
-import { daysAgo as age, isDev, pinLocation } from './status-view';
+import { daysAgo as age, pinLocation } from './status-view';
 
 export type Ecosystem = 'npm' | 'cargo';
 
@@ -44,6 +44,11 @@ export interface Usage {
 	path: string;
 	/** `dependencies`, `devDependencies`, `dev-dependencies`, … */
 	section: string;
+	/**
+	 * Development tooling: a dependency that never reaches the released code, so
+	 * being behind on it changes nothing a user gets. See {@link isTooling}.
+	 */
+	tooling: boolean;
 	/** The requirement exactly as written. */
 	requested: string;
 	/** Version the lockfile resolved it to, or null without a lockfile. */
@@ -86,7 +91,7 @@ const NPM_SECTIONS = [
 	'optionalDependencies',
 ];
 
-function npmUsages(file: RepoFile, maps: NameMaps): Usage[] {
+function npmUsages(file: RepoFile, maps: NameMaps, tooling: ReadonlySet<string>): Usage[] {
 	let manifest: Record<string, unknown>;
 	try {
 		manifest = JSON.parse(file.text) as Record<string, unknown>;
@@ -107,6 +112,7 @@ function npmUsages(file: RepoFile, maps: NameMaps): Usage[] {
 				consumer: file.repo,
 				path: file.path,
 				section,
+				tooling: isTooling('npm', name, section, tooling),
 				requested: spec,
 				installed: null,
 				lockPath: null,
@@ -200,6 +206,7 @@ function cargoUsages(file: RepoFile, maps: NameMaps): Usage[] {
 			consumer: file.repo,
 			path: file.path,
 			section: req.section,
+			tooling: isTooling('cargo', req.crate, req.section),
 			requested: requested || '(none)',
 			installed: null,
 			lockPath: null,
@@ -209,13 +216,39 @@ function cargoUsages(file: RepoFile, maps: NameMaps): Usage[] {
 }
 
 /**
+ * Whether a dependency never reaches the released code.
+ *
+ * Cargo's `dev-dependencies` are only built for tests, examples and benchmarks,
+ * so they never do. npm's `devDependencies` often do: an app or a library that
+ * bundles keeps what it bundles there. So only the packages the configuration
+ * names as tooling count, and only in `devDependencies` — anything else is
+ * assumed to ship, which is the safer mistake.
+ */
+export function isTooling(
+	ecosystem: Ecosystem,
+	name: string,
+	section: string,
+	tooling: ReadonlySet<string> = new Set(),
+): boolean {
+	if (ecosystem === 'cargo') return /(^|\.)dev-dependencies$/.test(section);
+	return section === 'devDependencies' && tooling.has(name);
+}
+
+/**
  * Every place a repository depends on another repository's npm package or
  * crate. Dependencies inside one repository — workspaces, path crates — are
  * left out: they are always in step by construction.
+ *
+ * `tooling` names the npm packages that never reach released code when they
+ * are development dependencies; see {@link isTooling}.
  */
-export function findUsages(files: RepoFile[], maps: NameMaps): Usage[] {
+export function findUsages(
+	files: RepoFile[],
+	maps: NameMaps,
+	tooling: ReadonlySet<string> = new Set(),
+): Usage[] {
 	return files.flatMap((file) => {
-		if (file.role === 'package') return npmUsages(file, maps);
+		if (file.role === 'package') return npmUsages(file, maps, tooling);
 		if (file.role === 'cargo') return cargoUsages(file, maps);
 		return [];
 	});
@@ -860,8 +893,9 @@ export async function collectDrift(
 	maps: NameMaps,
 	source: DriftSource,
 	mapLimit: <T, R>(items: readonly T[], worker: (item: T) => Promise<R>) => Promise<R[]>,
+	tooling: ReadonlySet<string> = new Set(),
 ): Promise<DriftResult> {
-	const usages = findUsages(files, maps);
+	const usages = findUsages(files, maps, tooling);
 
 	// Each lockfile is fetched once, however many usages share it.
 	const lockTexts = new Map<string, Promise<string | null>>();
@@ -1204,7 +1238,7 @@ export function renderDrift(result: DriftResult, options: ReportOptions): string
 				pad(where(row), whereWidth),
 				pad(row.installed ?? '—', installedWidth),
 				paint('dim', pad(row.requested, requestedWidth)),
-				isDev(row) ? paint('dim', 'dev') : '   ',
+				row.tooling ? paint('dim', 'tooling') : '       ',
 				note(row) ? paint(style.color, note(row)) : '',
 			];
 			lines.push(`  ${cells.join('  ')}`.trimEnd());
@@ -1238,7 +1272,7 @@ export function renderDrift(result: DriftResult, options: ReportOptions): string
 				pad(what(row), whatWidth),
 				pad(versions(row), versionsWidth),
 				paint('dim', pad(row.requested, requestedWidth)),
-				isDev(row) ? paint('dim', 'dev') : '   ',
+				row.tooling ? paint('dim', 'tooling') : '       ',
 				paint(style.color, note(row)),
 			];
 			lines.push(`  ${cells.join('  ')}`.trimEnd());

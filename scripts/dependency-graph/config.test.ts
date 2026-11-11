@@ -74,6 +74,16 @@ describe('loadConfig', () => {
 		);
 	});
 
+	it('reads the tooling packages, and has none unless told', () => {
+		expect(load(MINIMAL).tooling).toEqual([]);
+		expect(load(`${MINIMAL}\ntooling: ['@versatiles/release-tool']\n`).tooling).toEqual([
+			'@versatiles/release-tool',
+		]);
+		expect(() => load(`${MINIMAL}\ntooling: '@versatiles/release-tool'\n`)).toThrow(
+			/tooling must be a list/,
+		);
+	});
+
 	it('refuses a hue that is not an angle', () => {
 		const withHue = (hue: string) =>
 			MINIMAL.replace('title: Libraries', `title: Libraries\n    hue: ${hue}`);

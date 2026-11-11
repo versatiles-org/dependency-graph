@@ -16,7 +16,7 @@
  */
 
 import type { OutdatedUsage } from './drift';
-import { isDev, type QueueEntry } from './status-view';
+import type { QueueEntry } from './status-view';
 
 /** The sizes of a layout, which the page reads as well. */
 export interface GraphMetrics {
@@ -135,8 +135,11 @@ export interface GraphEdge {
 	consumer: string;
 	provider: string;
 	line: string;
-	/** Only development dependencies are behind. Drawn as widely spaced dots. */
-	dev: boolean;
+	/**
+	 * Only development tooling is behind, which never reaches released code.
+	 * Drawn as widely spaced dots.
+	 */
+	tooling: boolean;
 	/** Nothing is behind yet, but will be once the provider is released. */
 	dotted: boolean;
 }
@@ -291,7 +294,7 @@ export function buildQueueGraph(
 					consumer: entry.consumer,
 					provider: repo,
 					line: edgeLine(row.nodeX, x, row.y, own.y, m.curve),
-					dev: usages.length > 0 && usages.every((usage) => isDev(usage)),
+					tooling: usages.length > 0 && usages.every((usage) => usage.tooling),
 					dotted: usages.length === 0,
 				},
 			];
@@ -328,7 +331,10 @@ export function buildQueueGraph(
 			dottedLine: dotted.join(' '),
 			heads: heads.join(' '),
 			// Only solid lines: under dots, a halo would fill the gaps between them.
-			halo: [line, ...edges.filter((edge) => !edge.dotted && !edge.dev).map((edge) => edge.line)]
+			halo: [
+				line,
+				...edges.filter((edge) => !edge.dotted && !edge.tooling).map((edge) => edge.line),
+			]
 				.filter(Boolean)
 				.join(' '),
 			edges,

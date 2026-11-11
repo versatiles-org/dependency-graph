@@ -42,11 +42,6 @@ export function formatUtc(date: string): string {
 	return `${new Date(date).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 }
 
-/** npm's `devDependencies`, and Cargo's `dev-dependencies`, which can sit inside another table. */
-export function isDev(finding: Pick<Finding, 'section'>): boolean {
-	return /(^|\.)dev-?dependencies$/i.test(finding.section);
-}
-
 /** Where a pinned version was found: a file, an image, or a release's notes. */
 export function pinLocation(pin: Pick<PinFinding, 'path' | 'image' | 'tag' | 'component'>): string {
 	return pin.path ?? pin.image ?? `${pin.tag ?? 'latest release'}: ${pin.component}`;
@@ -92,7 +87,8 @@ export function filterDeployments(
 export interface DriftFilter {
 	/** Part of a repository or package name. */
 	query: string;
-	hideDev: boolean;
+	/** Leave out development tooling, which never reaches released code. */
+	hideTooling: boolean;
 	/** Leave out packages whose every usage is current. */
 	onlyOutdated: boolean;
 }
@@ -141,7 +137,7 @@ export function waitingOn(
 
 export function filterDrift(
 	report: DriftReport,
-	{ query, hideDev, onlyOutdated }: DriftFilter,
+	{ query, hideTooling, onlyOutdated }: DriftFilter,
 ): { queue: QueueEntry[]; packages: PackageReport[] } {
 	const wanted = query.trim().toLowerCase();
 	const matches = (text: string): boolean => text.toLowerCase().includes(wanted);
@@ -149,7 +145,8 @@ export function filterDrift(
 	const queue = report.dependents.flatMap((dependent, index): QueueEntry[] => {
 		const outdated = dependent.outdated.filter(
 			(finding) =>
-				!(hideDev && isDev(finding)) && (matches(dependent.consumer) || matches(finding.name)),
+				!(hideTooling && finding.tooling) &&
+				(matches(dependent.consumer) || matches(finding.name)),
 		);
 		return outdated.length > 0 ? [{ ...dependent, outdated, position: index + 1 }] : [];
 	});
@@ -157,7 +154,7 @@ export function filterDrift(
 	const packages = report.packages.flatMap((entry): PackageReport[] => {
 		const named = matches(entry.name) || matches(entry.provider);
 		const usages = entry.usages.filter(
-			(finding) => !(hideDev && isDev(finding)) && (named || matches(finding.consumer)),
+			(finding) => !(hideTooling && finding.tooling) && (named || matches(finding.consumer)),
 		);
 		if (usages.length === 0) return [];
 		if (onlyOutdated && usages.every((finding) => finding.status === 'current')) return [];

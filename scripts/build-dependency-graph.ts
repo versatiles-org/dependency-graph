@@ -165,6 +165,12 @@ async function main(): Promise<void> {
 	);
 
 	const { maps, warnings: mapWarnings } = buildNameMaps(files);
+	for (const name of config.tooling) {
+		if (!maps.npm.has(name)) {
+			mapWarnings.push(`${CONFIG_PATH}: tooling names "${name}", which no repository publishes`);
+		}
+	}
+	const tooling = new Set(config.tooling);
 
 	const collectVersions = async (): Promise<DriftResult> => {
 		if (cache) {
@@ -190,7 +196,7 @@ async function main(): Promise<void> {
 			lookup.add('lookups', items.length);
 			return mapLimit(items, (item) => lookup.track('lookups', () => worker(item)));
 		};
-		const result = await collectDrift(files, maps, source, tracked);
+		const result = await collectDrift(files, maps, source, tracked, tooling);
 		result.deployments = await collectDeployments(config.deployments, source, tracked);
 		result.pins = [
 			...(await collectPins(config.pins, config.pinnedImages, source, tracked)),

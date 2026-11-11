@@ -18,7 +18,6 @@ import {
 	filterPins,
 	formatUtc,
 	hoursAgo,
-	isDev,
 	isStale,
 	listRepos,
 	pinLocation,
@@ -48,18 +47,6 @@ describe('times', () => {
 
 	it('formats a date without depending on the time zone', () => {
 		expect(formatUtc('2026-11-01T10:43:03.727Z')).toBe('2026-11-01 10:43 UTC');
-	});
-});
-
-describe('isDev', () => {
-	it('recognises development sections of npm and Cargo', () => {
-		expect(isDev({ section: 'devDependencies' })).toBe(true);
-		expect(isDev({ section: 'dev-dependencies' })).toBe(true);
-		expect(isDev({ section: 'workspace.dev-dependencies' })).toBe(true);
-		expect(isDev({ section: "target.'cfg(unix)'.dev-dependencies" })).toBe(true);
-		expect(isDev({ section: 'dependencies' })).toBe(false);
-		expect(isDev({ section: 'workspace.dependencies' })).toBe(false);
-		expect(isDev({ section: 'peerDependencies' })).toBe(false);
 	});
 });
 
@@ -283,6 +270,7 @@ describe('filterDrift', () => {
 		consumer: 'a',
 		path: 'package.json',
 		section: 'dependencies',
+		tooling: false,
 		requested: '^6.0.1',
 		installed: '6.0.1',
 		lockPath: 'package-lock.json',
@@ -294,7 +282,7 @@ describe('filterDrift', () => {
 	const report = buildDriftReport({
 		findings: [
 			assess(usage({ consumer: 'first' }), style),
-			assess(usage({ consumer: 'second', section: 'devDependencies' }), style),
+			assess(usage({ consumer: 'second', section: 'devDependencies', tooling: true }), style),
 			assess(fontUsage({ consumer: 'second', requested: '^2.0.0', installed: '2.0.0' }), fonts),
 		],
 		releases: new Map([
@@ -302,7 +290,7 @@ describe('filterDrift', () => {
 			['npm:@versatiles/fonts', fonts],
 		]),
 	});
-	const all = { query: '', hideDev: false, onlyOutdated: false };
+	const all = { query: '', hideTooling: false, onlyOutdated: false };
 
 	it('keeps everything without a filter, numbered by place in the queue', () => {
 		const { queue, packages } = filterDrift(report, all);
@@ -333,8 +321,8 @@ describe('filterDrift', () => {
 		expect(queue.map((entry) => entry.consumer)).toEqual(['first', 'second']);
 	});
 
-	it('drops a repository whose only outdated usages are for development', () => {
-		const { queue, packages } = filterDrift(report, { ...all, hideDev: true });
+	it('drops a repository whose only outdated usages are development tooling', () => {
+		const { queue, packages } = filterDrift(report, { ...all, hideTooling: true });
 		expect(queue.map((entry) => entry.consumer)).toEqual(['first']);
 		expect(packages.flatMap((entry) => entry.usages.map((row) => row.consumer))).toEqual([
 			'second',
@@ -349,7 +337,7 @@ describe('filterDrift', () => {
 
 	it('leaves the report it was given untouched', () => {
 		const before = JSON.stringify(report);
-		filterDrift(report, { query: 'second', hideDev: true, onlyOutdated: true });
+		filterDrift(report, { query: 'second', hideTooling: true, onlyOutdated: true });
 		expect(JSON.stringify(report)).toBe(before);
 	});
 });

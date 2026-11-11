@@ -10,7 +10,6 @@ import {
 	filterPins,
 	formatUtc,
 	hoursAgo,
-	isDev,
 	isStale,
 	listRepos,
 	pinLocation,
@@ -82,18 +81,18 @@ const snapshotAge = computed(() =>
 const stale = computed(() => Boolean(data && now.value && isStale(data.generatedAt, now.value)));
 
 const query = ref('');
-const hideDev = ref(false);
+const hideTooling = ref(false);
 const onlyOutdated = ref(true);
 const filtered = computed(() =>
 	report
 		? filterDrift(report, {
 				query: query.value,
-				hideDev: hideDev.value,
+				hideTooling: hideTooling.value,
 				onlyOutdated: onlyOutdated.value,
 			})
 		: { queue: [], packages: [] },
 );
-const filtering = computed(() => query.value.trim() !== '' || hideDev.value);
+const filtering = computed(() => query.value.trim() !== '' || hideTooling.value);
 const listedRepos = computed(() => listRepos(repoStatus ?? [], query.value));
 const listedPins = computed(() => filterPins(report?.pins ?? [], query.value));
 const listedDeployments = computed(() => filterDeployments(report?.deployments ?? [], query.value));
@@ -364,8 +363,8 @@ const laneColor = (index: number): string => {
 					<input v-model="query" type="search" placeholder="Repository or package" />
 				</label>
 				<label v-if="report" class="toggle">
-					<input v-model="hideDev" type="checkbox" />
-					Hide development dependencies
+					<input v-model="hideTooling" type="checkbox" />
+					Hide development tooling
 				</label>
 			</div>
 
@@ -411,9 +410,9 @@ const laneColor = (index: number): string => {
 						</li>
 						<li>
 							<svg width="32" height="8" viewBox="0 0 32 8" aria-hidden="true">
-								<path d="M 3 4 L 30 4" class="graph-key-dev" />
+								<path d="M 3 4 L 30 4" class="graph-key-tooling" />
 							</svg>
-							Development dependency
+							Only development tooling, which is not in the released code
 						</li>
 						<li>
 							<svg width="32" height="8" viewBox="0 0 32 8" aria-hidden="true">
@@ -548,7 +547,7 @@ const laneColor = (index: number): string => {
 												>{{ detail.installed ?? '—' }} →
 												{{ detail.latest ?? '?' }}</span
 											>
-											<span v-if="isDev(detail)" class="dev">dev</span>
+											<span v-if="detail.tooling" class="tooling">tooling</span>
 										</span>
 									</template>
 									<template v-else>
@@ -577,7 +576,7 @@ const laneColor = (index: number): string => {
 												>{{ detail.installed ?? '—' }} →
 												{{ detail.latest ?? '?' }}</span
 											>
-											<span v-if="isDev(detail)" class="dev">dev</span>
+											<span v-if="detail.tooling" class="tooling">tooling</span>
 										</span>
 									</template>
 								</template>
@@ -610,7 +609,7 @@ const laneColor = (index: number): string => {
 										:key="edge.consumer"
 										class="lane-line"
 										:class="{
-											dev: edge.dev,
+											tooling: edge.tooling,
 											dotted: edge.dotted,
 											faint: !edgeLit(edge),
 										}"
@@ -965,7 +964,7 @@ const laneColor = (index: number): string => {
 												<a :href="fileUrl(row.consumer, row.path)">{{
 													row.consumer
 												}}</a>
-												<span v-if="isDev(row)" class="dev">dev</span>
+												<span v-if="row.tooling" class="tooling">tooling</span>
 												<span v-if="row.path.includes('/')" class="path">{{
 													row.path
 												}}</span>
@@ -1331,7 +1330,7 @@ thead th {
 	white-space: nowrap;
 }
 
-.dev {
+.tooling {
 	margin-left: 6px;
 	padding: 0 5px;
 	border: 1px solid var(--vp-c-divider);
@@ -1367,8 +1366,8 @@ thead th {
 	}
 }
 
-/* Four dots, as on a development line. */
-.graph-key-dev {
+/* Four dots, as on a development tooling line. */
+.graph-key-tooling {
 	fill: none;
 	stroke: var(--vp-c-text-2);
 	stroke-linecap: round;
@@ -1529,7 +1528,7 @@ thead th {
 		font-weight: 600;
 	}
 
-	.dev {
+	.tooling {
 		margin-left: 0;
 	}
 }
@@ -1577,7 +1576,7 @@ thead th {
 	 * mistaken for a solid line, and unlike the thin, close dots below they still
 	 * carry the lane's weight.
 	 */
-	&.dev {
+	&.tooling {
 		stroke-dasharray: 0 5;
 	}
 

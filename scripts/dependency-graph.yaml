@@ -56,6 +56,16 @@ tags:
 # each other, and puts first what the most other things are built with.
 update_order: [internal, core, tools, tile-production, ecosystem]
 
+# npm packages that are development tooling: as `devDependencies` they never
+# reach the released code, so being behind on them changes nothing a user gets.
+# The status page draws those lines as dots and can hide them.
+#
+# Every other `devDependencies` entry is assumed to ship, because apps and
+# bundling libraries keep what they bundle there. Cargo's `dev-dependencies`
+# need no entry: they are only built for tests, so they never ship.
+tooling:
+  - '@versatiles/release-tool'
+
 # Every public repository, and where it belongs. Anything not named here still
 # appears, but uncategorised — which is the reminder to come back and place it.
 repositories:

@@ -45,6 +45,8 @@ export interface GraphConfig {
 	bundles: Bundle[];
 	/** Tag ids in the order their repositories should be updated; see the drift report. */
 	updateOrder: string[];
+	/** npm packages that never reach released code as development dependencies. */
+	tooling: string[];
 	/** Docker image name (without tag) to the repository that builds it. */
 	images: Record<string, string>;
 	/** Repositories left out of the graph entirely. */
@@ -113,6 +115,13 @@ export function loadConfig(root: string): GraphConfig {
 		return id;
 	});
 	for (const tag of tags) if (!updateOrder.includes(tag.id)) updateOrder.push(tag.id);
+
+	if (doc.tooling !== undefined && !Array.isArray(doc.tooling)) {
+		fail('tooling must be a list of npm package names');
+	}
+	const tooling = ((doc.tooling as unknown[] | undefined) ?? []).map((name, index) =>
+		asString(name, `tooling[${index}]`),
+	);
 
 	const deployments = ((doc.deployments as unknown[] | undefined) ?? []).map((entry, index) => {
 		const where = `deployments[${index}]`;
@@ -207,6 +216,7 @@ export function loadConfig(root: string): GraphConfig {
 		pinnedImages,
 		bundles,
 		updateOrder,
+		tooling,
 		images: (doc.images as Record<string, string> | undefined) ?? {},
 		exclude: (doc.exclude as string[] | undefined) ?? [],
 		manual: manual.map((entry, index) => {
