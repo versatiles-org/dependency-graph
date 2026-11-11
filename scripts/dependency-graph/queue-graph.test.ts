@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { OutdatedUsage } from './drift';
-import { buildQueueGraph, laneLabel, NARROW, WIDE } from './queue-graph';
+import { buildQueueGraph, laneLabel, NARROW, WIDE, type GraphLane } from './queue-graph';
 import type { QueueEntry } from './status-view';
 
 const usage = (consumer: string, provider: string, overrides: Partial<OutdatedUsage> = {}) =>
@@ -28,6 +28,13 @@ const entry = (position: number, consumer: string, ...outdated: OutdatedUsage[])
 	position,
 	outdated,
 });
+
+/** The part of a lane drawn in one style, or '' when it has none. */
+const part = (lane: GraphLane, style: { waiting?: boolean; tooling?: boolean } = {}): string =>
+	lane.parts.find(
+		(each) =>
+			each.waiting === (style.waiting ?? false) && each.tooling === (style.tooling ?? false),
+	)?.d ?? '';
 
 /** What `waitingOn` returns for repositories that ship. */
 const waits = (...providers: string[]) =>
@@ -88,7 +95,7 @@ describe('buildQueueGraph', () => {
 			`M ${WIDE.nodeX} ${server.y} L ${lane.x - 14} ${server.y} A 14 14 0 0 0 ${lane.x} ${server.y - 14}`,
 		);
 		// The lane ends where the curve arrives, and points at the node of its package.
-		expect(lane.line).toBe(`M ${lane.x} ${release.y + 18} L ${lane.x} ${server.y - 14}`);
+		expect(part(lane)).toBe(`M ${lane.x} ${release.y + 18} L ${lane.x} ${server.y - 14}`);
 		expect(lane.heads).toContain(`L ${lane.x} ${release.y + 9} `);
 	});
 
@@ -96,8 +103,8 @@ describe('buildQueueGraph', () => {
 		const graph = buildQueueGraph(queue, {});
 		const [style] = graph.lanes;
 		expect(style.edges).toHaveLength(2);
-		for (const part of [style.line, ...style.edges.map((edge) => edge.line)]) {
-			expect(style.halo).toContain(part);
+		for (const path of [part(style), ...style.edges.map((edge) => edge.line)]) {
+			expect(style.halo).toContain(path);
 		}
 	});
 
@@ -152,12 +159,12 @@ describe('buildQueueGraph', () => {
 				{},
 			);
 			const lane = graph.lanes.find((each) => each.repo === 'tool')!;
-			expect(lane.line).toBe('');
-			expect(lane.toolingLine).toBe(
+			expect(part(lane)).toBe('');
+			expect(part(lane, { tooling: true })).toBe(
 				`M ${lane.x} ${y(graph, 'tool') + 18} L ${lane.x} ${y(graph, 'b') - 14}`,
 			);
-			expect(lane.waitingLine).toBe('');
-			expect(lane.waitingToolingLine).toBe('');
+			expect(part(lane, { waiting: true })).toBe('');
+			expect(part(lane, { waiting: true, tooling: true })).toBe('');
 			expect(lane.halo).toBe('');
 			expect(lane.color).not.toBeNull();
 		});
@@ -180,11 +187,11 @@ describe('buildQueueGraph', () => {
 				(repo) => lane.edges.find((edge) => edge.consumer === repo)!.y,
 			);
 			expect(c).toBe(y(graph, 'c') + WIDE.detailHeight / 2);
-			expect(lane.line).toBe(`M ${lane.x} ${tool + 18} L ${lane.x} ${a - 14}`);
-			expect(lane.toolingLine).toBe(`M ${lane.x} ${a - 14} L ${lane.x} ${b - 14}`);
-			expect(lane.waitingLine).toBe(`M ${lane.x} ${b - 14} L ${lane.x} ${c - 14}`);
-			expect(lane.halo).toContain(lane.line);
-			expect(lane.halo).not.toContain(lane.toolingLine);
+			expect(part(lane)).toBe(`M ${lane.x} ${tool + 18} L ${lane.x} ${a - 14}`);
+			expect(part(lane, { tooling: true })).toBe(`M ${lane.x} ${a - 14} L ${lane.x} ${b - 14}`);
+			expect(part(lane, { waiting: true })).toBe(`M ${lane.x} ${b - 14} L ${lane.x} ${c - 14}`);
+			expect(lane.halo).toContain(part(lane));
+			expect(lane.halo).not.toContain(part(lane, { tooling: true }));
 		});
 	});
 
@@ -199,10 +206,14 @@ describe('buildQueueGraph', () => {
 	it('starts every line of a row at a dot of its own, level with its usage', () => {
 		const graph = buildQueueGraph(queue, {});
 		const choro = graph.rows.find((row) => row.repo === 'choro')!;
-		const starts = graph.lanes.flatMap((lane) =>
-			lane.edges.filter((edge) => edge.consumer === 'choro').map((edge) => [edge.x, edge.y]),
+		const edges = graph.lanes.flatMap((lane) =>
+			lane.edges.filter((edge) => edge.consumer === 'choro'),
 		);
-		expect(starts).toEqual(choro.details.map((detail) => [WIDE.nodeX, choro.top + detail.y]));
+		expect(edges.map((edge) => edge.y)).toEqual(
+			choro.details.map((detail) => choro.top + detail.y),
+		);
+		for (const edge of edges)
+			expect(edge.line.startsWith(`M ${WIDE.nodeX} ${edge.y} `)).toBe(true);
 	});
 
 	it('orders the usages of a row by lane, so that its lines do not cross', () => {
@@ -248,8 +259,8 @@ describe('buildQueueGraph', () => {
 			const styler = graph.rows[1];
 			const stylerLane = graph.lanes[1];
 			expect(stylerLane.repo).toBe('styler');
-			expect(styler).toMatchObject({ position: 1, lane: 1, nodeX: stylerLane.x });
-			expect(stylerLane.line.startsWith(`M ${stylerLane.x} ${styler.y + 18} `)).toBe(true);
+			expect(styler).toMatchObject({ position: 1, lane: 1 });
+			expect(part(stylerLane).startsWith(`M ${stylerLane.x} ${styler.y + 18} `)).toBe(true);
 		});
 
 		it('starts the lines of a repository with a lane of its own left of every lane', () => {
@@ -258,7 +269,7 @@ describe('buildQueueGraph', () => {
 			expect(release.repo).toBe('style');
 			const [style] = graph.lanes;
 			const edge = style.edges.find((each) => each.consumer === 'styler')!;
-			expect([edge.x, edge.y]).toEqual([WIDE.nodeX, styler.y]);
+			expect(edge.y).toBe(styler.y);
 			expect(edge.line).toBe(
 				`M ${WIDE.nodeX} ${styler.y} L ${style.x - 14} ${styler.y} A 14 14 0 0 0 ${style.x} ${styler.y - 14}`,
 			);
@@ -281,7 +292,7 @@ describe('buildQueueGraph', () => {
 			const laneB = graph.lanes.find((lane) => lane.repo === 'b')!;
 			// a sits above the row of b, and bends down into its lane.
 			expect(laneB.edges[0].line).toContain(`${laneB.x} ${a.y + 14}`);
-			expect(laneB.line).toContain(`M ${laneB.x} ${b.y - 18} L ${laneB.x} ${a.y + 14}`);
+			expect(part(laneB)).toContain(`M ${laneB.x} ${b.y - 18} L ${laneB.x} ${a.y + 14}`);
 			expect(graph.hasReleases).toBe(false);
 		});
 	});
@@ -315,8 +326,10 @@ describe('buildQueueGraph', () => {
 			// What tools only waits for gets a line of its own, after its usage.
 			const tools = lane.edges[1].y;
 			expect(tools).toBe(y('tools') + WIDE.detailHeight / 2);
-			expect(lane.line).toBe(`M ${lane.x} ${container + 18} L ${lane.x} ${server - 14}`);
-			expect(lane.waitingLine).toBe(`M ${lane.x} ${server - 14} L ${lane.x} ${tools - 14}`);
+			expect(part(lane)).toBe(`M ${lane.x} ${container + 18} L ${lane.x} ${server - 14}`);
+			expect(part(lane, { waiting: true })).toBe(
+				`M ${lane.x} ${server - 14} L ${lane.x} ${tools - 14}`,
+			);
 			// Only lines that are behind are highlighted.
 			expect(lane.halo).toContain(lane.edges[0].line);
 			expect(lane.halo).not.toContain(lane.edges[1].line);
@@ -332,8 +345,10 @@ describe('buildQueueGraph', () => {
 			const lane = graph.lanes[1];
 			const container = graph.rows.find((row) => row.repo === 'container')!.y;
 			const server = lane.edges[0].y;
-			expect(lane.line).toBe('');
-			expect(lane.waitingLine).toBe(`M ${lane.x} ${container + 18} L ${lane.x} ${server - 14}`);
+			expect(part(lane)).toBe('');
+			expect(part(lane, { waiting: true })).toBe(
+				`M ${lane.x} ${container + 18} L ${lane.x} ${server - 14}`,
+			);
 			expect(lane.halo).toBe('');
 			// A smaller arrowhead, to suit the thin lines.
 			expect(lane.heads).toContain(`L ${lane.x} ${container + 18 - 5.4} `);
@@ -353,7 +368,7 @@ describe('buildQueueGraph', () => {
 			// tools is behind on container, which ships, so the lane is thick that far.
 			const tools = lane.edges.find((edge) => edge.consumer === 'tools')!;
 			expect([tools.waiting, tools.tooling]).toEqual([false, false]);
-			expect(lane.waitingToolingLine).toBe('');
+			expect(part(lane, { waiting: true, tooling: true })).toBe('');
 			const alone = buildQueueGraph(
 				waiting.slice(0, 2),
 				{},
@@ -361,8 +376,8 @@ describe('buildQueueGraph', () => {
 					server: [{ provider: 'container', tooling: true }],
 				},
 			).lanes[1];
-			expect(alone.waitingLine).toBe('');
-			expect(alone.waitingToolingLine).not.toBe('');
+			expect(part(alone, { waiting: true })).toBe('');
+			expect(part(alone, { waiting: true, tooling: true })).not.toBe('');
 		});
 
 		it('ignores a repository that is not shown', () => {
@@ -421,7 +436,7 @@ describe('buildQueueGraph', () => {
 			expect(lane.edges[0].line).toBe(
 				`M ${NARROW.nodeX} ${y} L ${lane.x - 7} ${y} A 7 7 0 0 0 ${lane.x} ${y - 7}`,
 			);
-			expect(lane.line).toBe(`M ${lane.x} ${release.y + 14} L ${lane.x} ${y - 7}`);
+			expect(part(lane)).toBe(`M ${lane.x} ${release.y + 14} L ${lane.x} ${y - 7}`);
 			expect(lane.heads).toContain(`L ${lane.x} ${release.y + 7} `);
 		});
 	});

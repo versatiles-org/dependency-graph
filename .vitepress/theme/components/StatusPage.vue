@@ -609,21 +609,12 @@ const laneColor = (index: number): string => {
 									:class="{ faint: !laneLit(lane) }"
 								>
 									<path v-if="lane.halo" class="lane-halo" :d="lane.halo" />
-									<path v-if="lane.line" class="lane-line" :d="lane.line" />
 									<path
-										v-if="lane.toolingLine"
-										class="lane-line tooling"
-										:d="lane.toolingLine"
-									/>
-									<path
-										v-if="lane.waitingLine"
-										class="lane-line waiting"
-										:d="lane.waitingLine"
-									/>
-									<path
-										v-if="lane.waitingToolingLine"
-										class="lane-line waiting tooling"
-										:d="lane.waitingToolingLine"
+										v-for="part in lane.parts"
+										:key="`${part.waiting} ${part.tooling}`"
+										class="lane-line"
+										:class="{ tooling: part.tooling, waiting: part.waiting }"
+										:d="part.d"
 									/>
 									<path class="lane-head" :d="lane.heads" />
 									<path
@@ -642,7 +633,7 @@ const laneColor = (index: number): string => {
 										:key="`dot ${edge.consumer}`"
 										class="graph-dot"
 										:class="{ faint: !edgeLit(edge) }"
-										:cx="edge.x"
+										:cx="metrics.nodeX"
 										:cy="edge.y"
 										:r="metrics.dotRadius"
 									/>
@@ -656,19 +647,16 @@ const laneColor = (index: number): string => {
 									<circle
 										v-if="row.lane !== null"
 										class="graph-node"
-										:cx="row.nodeX"
+										:cx="graph.lanes[row.lane].x"
 										:cy="row.y"
 										:r="metrics.nodeRadius"
-										:style="{
-											fill:
-												row.lane !== null ? laneColor(row.lane) : 'var(--vp-c-text-2)',
-										}"
+										:style="{ fill: laneColor(row.lane) }"
 									/>
 									<!-- Stacked, the name beside the node is in the lane's colour instead. -->
 									<text
 										v-if="row.lane !== null && !narrow"
 										class="graph-label"
-										:x="row.nodeX + 12"
+										:x="graph.lanes[row.lane].x + 12"
 										:y="row.y + 4"
 										:style="{ fill: laneColor(row.lane) }"
 									>
