@@ -21,7 +21,6 @@ import {
 	publishedPackages,
 	readPin,
 	registryUrl,
-	renderDrift,
 	updateOrder,
 	toRange,
 	type DriftSource,
@@ -421,17 +420,11 @@ describe('collectDrift', () => {
 			source: 'manifest',
 		});
 
-		const report = renderDrift(result, {
-			color: false,
-			now: new Date('2026-09-28T00:00:00Z'),
-			onlyOutdated: false,
-		});
-		expect(report).toContain('@versatiles/style 6.0.3  npm · from versatiles-style');
-		expect(report).toContain('released 2026-09-20 (8 days ago)');
-		expect(report).toContain('not published, version on main');
-		expect(report).not.toContain('npm update');
-		expect(report).toContain('frontend  2 outdated');
-		expect(report).toMatch(/2 packages, 2 usages: 1 range excludes latest, 1 stale-lock$/);
+		const report = buildDriftReport(result);
+		expect(report.dependents.map((entry) => [entry.consumer, entry.outdated.length])).toEqual([
+			['frontend', 2],
+		]);
+		expect(report.totals.byStatus).toMatchObject({ range: 1, 'stale-lock': 1 });
 	});
 });
 
@@ -554,27 +547,13 @@ describe('pinned releases', () => {
 			});
 		});
 
-		it('sorts what is behind first, counts it and prints it', async () => {
+		it('sorts what is behind first, and counts it', async () => {
 			const found = await collectPins(pins, images, source, mapLimit);
 			const result = { findings: [], releases: new Map(), pins: found };
 			const report = buildDriftReport(result);
 			expect(report.pins.slice(0, 2).map((pin) => pin.status)).toEqual(['behind', 'behind']);
 			expect(report.totals.pinsBehind).toBe(2);
 			expect(report.pins.at(-1)?.status).toBe('current');
-
-			const text = renderDrift(result, {
-				color: false,
-				now: new Date(),
-				onlyOutdated: true,
-			});
-			expect(text).toContain('Pinned releases');
-			expect(text).toMatch(
-				/↑ {2}brew\/old\.rb +5\.4\.0 → 5\.5\.0 {2}rs {2}minor behind, update the pin/,
-			);
-			expect(text).toContain('docker/org/stale');
-			// Current pins stay out of a report of what is outdated.
-			expect(text).not.toContain('org/fresh');
-			expect(text).toMatch(/2 pinned behind$/);
 		});
 	});
 });
@@ -689,19 +668,6 @@ describe('bundled releases', () => {
 				mapLimit,
 			);
 			expect(found.map((pin) => pin.note)).toEqual(Array(3).fill('not in the release notes'));
-		});
-
-		it('prints bundled components with the release they are in', async () => {
-			const pins = await collectBundles([bundle], source, mapLimit);
-			const text = renderDrift(
-				{ findings: [], releases: new Map(), pins },
-				{ color: false, now: new Date(), onlyOutdated: true },
-			);
-			expect(text).toContain('versatiles-frontend/v3.16.1: VersaTiles Style');
-			expect(text).toMatch(
-				/7\.0\.1 → 7\.1\.0 {2}versatiles-style {2}minor behind, needs a new release/,
-			);
-			expect(text).toMatch(/1 pinned behind$/);
 		});
 	});
 });
@@ -920,85 +886,6 @@ describe('buildDriftReport', () => {
 	});
 });
 
-describe('renderDrift', () => {
-	const now = new Date('2026-09-28T00:00:00Z');
-
-	it('shows the spread of versions and puts the worst first', () => {
-		const findings = [
-			assess(usage({ consumer: 'a', installed: '6.0.3' }), release('6.0.3')),
-			assess(
-				usage({ consumer: 'b', requested: '^5.0.0', installed: '5.0.0' }),
-				release('6.0.3'),
-			),
-			assess(usage({ consumer: 'c', path: 'web/package.json' }), release('6.0.3')),
-		];
-		const report = renderDrift(
-			{ findings, releases: new Map([['npm:@versatiles/style', release('6.0.3')]]) },
-			{ color: false, now, onlyOutdated: false },
-		);
-		const lines = report.split('\n');
-		expect(lines[0]).toBe('Packages and their dependents');
-		expect(lines[3]).toBe('  6.0.3 ×1 · 6.0.1 ×1 · 5.0.0 ×1');
-		expect(lines[4]).toMatch(/^ {2}✗ {2}b /);
-		expect(lines[5]).toMatch(/^ {2}↑ {2}c\/web /);
-		expect(lines[6]).toMatch(/^ {2}✓ {2}a /);
-	});
-
-	it('lists, per dependent, the packages it is behind on', () => {
-		const style = release('6.0.3');
-		const core = usage({ name: '@versatiles/core', provider: 'versatiles-core' });
-		const findings = [
-			assess(usage({ consumer: 'a', installed: '6.0.3' }), style),
-			assess(usage({ consumer: 'b', path: 'web/package.json' }), style),
-			assess(usage({ consumer: 'b', requested: '^5.0.0', installed: '5.0.0' }), style),
-			assess(
-				{ ...core, consumer: 'b', section: 'devDependencies', tooling: true },
-				release('6.1.0'),
-			),
-			assess({ ...core, consumer: 'c', installed: '7.0.0' }, release('6.1.0')),
-		];
-		const releases = new Map([
-			['npm:@versatiles/style', style],
-			['npm:@versatiles/core', release('6.1.0')],
-		]);
-		const report = renderDrift(
-			{ findings, releases },
-			{ color: false, now, onlyOutdated: false },
-		);
-		const section = report.split('after the repositories it builds on\n\n')[1].split('\n');
-		expect(section.slice(0, 5)).toEqual([
-			'b  3 outdated',
-			'  ✗  @versatiles/style         5.0.0 → 6.0.3  ^5.0.0           major behind, range excludes latest',
-			'  ↑  @versatiles/core          6.0.1 → 6.1.0  ^6.0.1  tooling  minor behind, range admits latest, lockfile is behind',
-			'  ↑  @versatiles/style in web  6.0.1 → 6.0.3  ^6.0.1           patch behind, range admits latest, lockfile is behind',
-			'',
-		]);
-		// a is current and c is ahead: neither has anything to update.
-		expect(section[5]).toMatch(/^2 packages, 5 usages/);
-	});
-
-	it('can leave out packages that are fully current, and colours on request', () => {
-		const findings = [assess(usage({ installed: '6.0.3' }), release('6.0.3'))];
-		const result = { findings, releases: new Map([['npm:@versatiles/style', release('6.0.3')]]) };
-		expect(renderDrift(result, { color: false, now, onlyOutdated: true })).toBe(
-			'1 package, 1 usage: 1 current',
-		);
-		expect(renderDrift(result, { color: true, now, onlyOutdated: false })).toContain('\u001b[');
-	});
-
-	it('says how long ago a release was', () => {
-		const at = (date: string): Release => ({ version: '6.0.3', date, source: 'registry' });
-		const findings = [assess(usage({ installed: '6.0.3' }), release('6.0.3'))];
-		const render = (date: string): string =>
-			renderDrift(
-				{ findings, releases: new Map([['npm:@versatiles/style', at(date)]]) },
-				{ color: false, now, onlyOutdated: false },
-			);
-		expect(render('2026-09-28T00:00:00Z')).toContain('(today)');
-		expect(render('2026-09-27T00:00:00Z')).toContain('(1 day ago)');
-	});
-});
-
 describe('updateOrder', () => {
 	const uses = (consumer: string, provider: string) => ({ consumer, provider });
 
@@ -1137,49 +1024,5 @@ describe('deployments', () => {
 			mapLimit,
 		);
 		expect(asked.sort()).toEqual(['versatiles-frontend', 'versatiles-rs', 'versatiles-style']);
-	});
-
-	it('lists the deployments after the packages, and counts what needs a redeploy', () => {
-		const report = renderDrift(
-			{
-				findings: [],
-				releases: new Map(),
-				deployments: [
-					assessDeployment(
-						deployment,
-						{
-							versatiles: '5.4.0',
-							frontend: 'v3.15.2',
-							styles: 'v7.0.1',
-							updated: '2026-10-18T22:18:58Z',
-						},
-						latest,
-					),
-				],
-			},
-			{ color: false, now: new Date('2026-10-19T12:00:00Z'), onlyOutdated: false },
-		);
-		expect(report).toContain('Deployments');
-		expect(report).toContain(
-			'tiles.versatiles.org  https://tiles.versatiles.org/version.json · updated 2026-10-18 (today)',
-		);
-		expect(report).toMatch(
-			/↑ {2}frontend {4}3\.15\.2 → 3\.16\.1 {2}versatiles-frontend {2}minor behind, redeploy, released 2026-10-16/,
-		);
-		expect(report).toMatch(/✓ {2}versatiles {2}5\.4\.0/);
-		expect(report).toMatch(/1 deployed behind$/);
-	});
-
-	it('leaves out a deployment that is current when asked for what is outdated', () => {
-		const current = assessDeployment(
-			deployment,
-			{ versatiles: '5.4.0', frontend: '3.16.1', styles: '7.0.1' },
-			latest,
-		);
-		const report = renderDrift(
-			{ findings: [], releases: new Map(), deployments: [current] },
-			{ color: false, now: new Date(), onlyOutdated: true },
-		);
-		expect(report).not.toContain('Deployments');
 	});
 });

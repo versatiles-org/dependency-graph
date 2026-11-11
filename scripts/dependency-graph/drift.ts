@@ -4,8 +4,7 @@
  *
  * This is a maintainer's tool, not documentation. Versions move with every
  * release and every lockfile refresh, so nothing here is committed: it reaches
- * the status page through a snapshot written at build time, and
- * `npm run sync:deps -- --drift` prints the same report in the terminal.
+ * the status page through a snapshot written at build time.
  *
  * For every place a repository depends on an organisation package, three
  * versions are compared:
@@ -24,10 +23,9 @@
  */
 
 import { dirname, posix } from 'path';
-import { styleText } from 'util';
 import semver from 'semver';
 import type { NameMaps, RepoFile } from './collect';
-import { daysAgo as age, pinLocation } from './status-view';
+import { pinLocation } from './status-view';
 
 export type Ecosystem = 'npm' | 'cargo';
 
@@ -962,41 +960,6 @@ const PIN_ORDER: DeploymentStatus[] = ['behind', 'unknown', 'ahead', 'current'];
 /** The statuses that mean a newer release exists and is not in use. */
 const OUTDATED: Status[] = ['range', 'stale-lock'];
 
-const STATUS_STYLE: Record<Status, { mark: string; color: Parameters<typeof styleText>[0] }> = {
-	range: { mark: '✗', color: 'red' },
-	'stale-lock': { mark: '↑', color: 'yellow' },
-	unknown: { mark: '?', color: 'magenta' },
-	ahead: { mark: '»', color: 'cyan' },
-	current: { mark: '✓', color: 'green' },
-};
-
-/** A deployment behind is fixed like a stale lockfile: no edit, just a redeploy. */
-const DEPLOYMENT_STYLE: Record<
-	DeploymentStatus,
-	{ mark: string; color: Parameters<typeof styleText>[0] }
-> = {
-	behind: { mark: '↑', color: 'yellow' },
-	unknown: { mark: '?', color: 'magenta' },
-	ahead: { mark: '»', color: 'cyan' },
-	current: { mark: '✓', color: 'green' },
-};
-
-function pad(text: string, width: number): string {
-	return text + ' '.repeat(Math.max(0, width - [...text].length));
-}
-
-export interface ReportOptions {
-	color: boolean;
-	now: Date;
-	/** Leave out packages whose every usage is current. */
-	onlyOutdated: boolean;
-	/**
-	 * Breaks ties in the update order: of two repositories that do not depend
-	 * on each other, the one with the lower rank is listed first.
-	 */
-	rank?: (repo: string) => number;
-}
-
 /**
  * The order in which to work through `repos` so that nothing has to be done
  * twice: a repository comes after every other one in the list whose packages
@@ -1102,6 +1065,11 @@ export interface DriftReport {
 	};
 }
 
+/**
+ * Groups the findings by package and by dependent, for the status page.
+ * `rank` breaks ties in the update order: of two repositories that do not
+ * depend on each other, the one with the lower rank is listed first.
+ */
 export function buildDriftReport(
 	result: DriftResult,
 	rank?: (repo: string) => number,
@@ -1196,181 +1164,4 @@ export function buildDriftReport(
 			pinsBehind: pins.filter((pin) => pin.status === 'behind').length,
 		},
 	};
-}
-
-export function renderDrift(result: DriftResult, options: ReportOptions): string {
-	const report = buildDriftReport(result, options.rank);
-	const paint = (format: Parameters<typeof styleText>[0], text: string): string =>
-		options.color ? styleText(format, text, { validateStream: false }) : text;
-
-	const note = (finding: Finding): string =>
-		[finding.behind ? `${finding.behind} behind` : '', finding.note].filter(Boolean).join(', ');
-	const isRoot = (finding: Finding): boolean =>
-		finding.path === 'package.json' || finding.path === 'Cargo.toml';
-
-	const lines: string[] = [];
-
-	for (const { ecosystem, name, provider, release, spread, usages: rows } of report.packages) {
-		if (options.onlyOutdated && rows.every((finding) => finding.status === 'current')) continue;
-
-		const header = [paint('bold', name), paint('bold', release?.version ?? '?')];
-		const facts = [ecosystem, `from ${provider}`];
-		if (release?.source === 'manifest') facts.push('not published, version on main');
-		if (release?.date)
-			facts.push(`released ${release.date.slice(0, 10)} (${age(release.date, options.now)})`);
-		lines.push(`${header.join(' ')}  ${paint('dim', facts.join(' · '))}`);
-
-		// "6.0.3 ×9 · 6.0.1 ×2": the spread at a glance, newest first.
-		lines.push(
-			`  ${paint('dim', spread.map(({ version, count }) => `${version} ×${count}`).join(' · '))}`,
-		);
-
-		const where = (finding: Finding): string =>
-			isRoot(finding) ? finding.consumer : `${finding.consumer}/${dirname(finding.path)}`;
-		const whereWidth = Math.max(...rows.map((row) => [...where(row)].length));
-		const installedWidth = Math.max(...rows.map((row) => (row.installed ?? '—').length));
-		const requestedWidth = Math.max(...rows.map((row) => row.requested.length));
-
-		for (const row of rows) {
-			const style = STATUS_STYLE[row.status];
-			const cells = [
-				paint(style.color, style.mark),
-				pad(where(row), whereWidth),
-				pad(row.installed ?? '—', installedWidth),
-				paint('dim', pad(row.requested, requestedWidth)),
-				row.tooling ? paint('dim', 'tooling') : '       ',
-				note(row) ? paint(style.color, note(row)) : '',
-			];
-			lines.push(`  ${cells.join('  ')}`.trimEnd());
-		}
-		lines.push('');
-	}
-	if (lines.length > 0) lines.unshift(paint('underline', 'Packages and their dependents'), '');
-
-	if (report.dependents.length > 0)
-		lines.push(
-			paint('underline', 'Dependents and their outdated packages'),
-			paint('dim', 'in the order to update them: each one after the repositories it builds on'),
-			'',
-		);
-
-	for (const { consumer, outdated: rows } of report.dependents) {
-		lines.push(`${paint('bold', consumer)}  ${paint('dim', `${rows.length} outdated`)}`);
-
-		const what = (finding: Finding): string =>
-			isRoot(finding) ? finding.name : `${finding.name} in ${dirname(finding.path)}`;
-		const versions = (finding: OutdatedUsage): string =>
-			`${finding.installed ?? '—'} → ${finding.latest ?? '?'}`;
-		const whatWidth = Math.max(...rows.map((row) => [...what(row)].length));
-		const versionsWidth = Math.max(...rows.map((row) => [...versions(row)].length));
-		const requestedWidth = Math.max(...rows.map((row) => row.requested.length));
-
-		for (const row of rows) {
-			const style = STATUS_STYLE[row.status];
-			const cells = [
-				paint(style.color, style.mark),
-				pad(what(row), whatWidth),
-				pad(versions(row), versionsWidth),
-				paint('dim', pad(row.requested, requestedWidth)),
-				row.tooling ? paint('dim', 'tooling') : '       ',
-				paint(style.color, note(row)),
-			];
-			lines.push(`  ${cells.join('  ')}`.trimEnd());
-		}
-		lines.push('');
-	}
-
-	const shownPins = report.pins.filter((pin) => !options.onlyOutdated || pin.status !== 'current');
-	if (shownPins.length > 0) {
-		lines.push(paint('underline', 'Pinned releases'), '');
-		const what = (pin: PinFinding): string => `${pin.repo}/${pinLocation(pin)}`;
-		const versions = (pin: PinFinding): string =>
-			pin.status === 'behind' ? `${pin.pinned} → ${pin.latest?.version}` : (pin.pinned ?? '—');
-		const whatWidth = Math.max(...shownPins.map((pin) => [...what(pin)].length));
-		const versionsWidth = Math.max(...shownPins.map((pin) => [...versions(pin)].length));
-		for (const pin of shownPins) {
-			const style = DEPLOYMENT_STYLE[pin.status];
-			const note = [pin.behind ? `${pin.behind} behind` : '', pin.note]
-				.filter(Boolean)
-				.join(', ');
-			const cells = [
-				paint(style.color, style.mark),
-				pad(what(pin), whatWidth),
-				pad(versions(pin), versionsWidth),
-				paint('dim', pin.provider ?? '—'),
-				note ? paint(style.color, note) : '',
-			];
-			lines.push(`  ${cells.join('  ')}`.trimEnd());
-		}
-		lines.push('');
-	}
-
-	// Deployments last: they can only catch up once everything above is released.
-	const shownDeployments = report.deployments.filter(
-		(deployment) =>
-			!options.onlyOutdated ||
-			!deployment.reachable ||
-			deployment.findings.some((finding) => finding.status !== 'current'),
-	);
-	if (shownDeployments.length > 0) lines.push(paint('underline', 'Deployments'), '');
-	for (const deployment of shownDeployments) {
-		const facts = [deployment.url];
-		if (deployment.updated) {
-			facts.push(
-				`updated ${deployment.updated.slice(0, 10)} (${age(deployment.updated, options.now)})`,
-			);
-		}
-		lines.push(`${paint('bold', deployment.repo)}  ${paint('dim', facts.join(' · '))}`);
-		if (!deployment.reachable) {
-			lines.push(
-				`  ${paint('magenta', '?')}  ${paint('magenta', 'could not read the versions')}`,
-				'',
-			);
-			continue;
-		}
-		const versions = (finding: DeploymentFinding): string =>
-			finding.status === 'behind'
-				? `${finding.deployed} → ${finding.latest?.version}`
-				: (finding.deployed ?? '—');
-		const componentWidth = Math.max(
-			...deployment.findings.map((row) => [...row.component].length),
-		);
-		const versionsWidth = Math.max(...deployment.findings.map((row) => versions(row).length));
-		const providerWidth = Math.max(
-			...deployment.findings.map((row) => (row.provider ?? '—').length),
-		);
-		for (const row of deployment.findings) {
-			const style = DEPLOYMENT_STYLE[row.status];
-			const released =
-				row.status === 'behind' && row.latest?.date
-					? `released ${row.latest.date.slice(0, 10)} (${age(row.latest.date, options.now)})`
-					: '';
-			const note = [row.behind ? `${row.behind} behind` : '', row.note, released]
-				.filter(Boolean)
-				.join(', ');
-			const cells = [
-				paint(style.color, style.mark),
-				pad(row.component, componentWidth),
-				pad(versions(row), versionsWidth),
-				paint('dim', pad(row.provider ?? '—', providerWidth)),
-				note ? paint(style.color, note) : '',
-			];
-			lines.push(`  ${cells.join('  ')}`.trimEnd());
-		}
-		lines.push('');
-	}
-
-	const counted = (count: number, noun: string): string =>
-		`${count} ${noun}${count === 1 ? '' : 's'}`;
-	const { usages, byStatus, deploymentsBehind, pinsBehind } = report.totals;
-	const summary = STATUS_ORDER.filter((status) => byStatus[status]).map(
-		(status) => `${byStatus[status]} ${status === 'range' ? 'range excludes latest' : status}`,
-	);
-	if (pinsBehind > 0) summary.push(`${pinsBehind} pinned behind`);
-	if (deploymentsBehind > 0) summary.push(`${deploymentsBehind} deployed behind`);
-	lines.push(
-		`${counted(report.packages.length, 'package')}, ${counted(usages, 'usage')}` +
-			(summary.length ? `: ${summary.join(', ')}` : ''),
-	);
-	return lines.join('\n');
 }

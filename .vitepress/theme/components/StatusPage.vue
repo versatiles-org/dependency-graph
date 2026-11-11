@@ -24,7 +24,7 @@ import {
 	type GraphRow,
 } from '../../../scripts/dependency-graph/queue-graph';
 
-/** The same marks as the terminal report, so colour never has to speak alone. */
+/** Every status has a mark as well, so colour never has to speak alone. */
 const STATUS: Record<Status, { mark: string; label: string; one: string; many: string }> = {
 	range: {
 		mark: '✗',
@@ -49,7 +49,7 @@ const STATUS: Record<Status, { mark: string; label: string; one: string; many: s
 };
 const ORDER = Object.keys(STATUS) as Status[];
 
-/** A pin has no range to change, so behind is drawn like a stale lockfile, as in the terminal. */
+/** A pin has no range to change, so behind is drawn like a stale lockfile. */
 const PIN_STATUS: Record<PinFinding['status'], { mark: string; tone: Status }> = {
 	behind: { mark: '↑', tone: 'stale-lock' },
 	unknown: { mark: '?', tone: 'unknown' },

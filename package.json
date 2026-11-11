@@ -14,7 +14,6 @@
   "scripts": {
     "build": "vitepress build .",
     "sync:deps": "tsx scripts/build-dependency-graph.ts",
-    "deps:drift": "tsx scripts/build-dependency-graph.ts --drift",
     "test": "vitest run",
     "check": "npm run format && npm run lint && npm run lint:types && npm run test && npm run build",
     "dev": "vitepress dev .",

@@ -20,7 +20,6 @@ To correct or extend the graph, edit `scripts/dependency-graph.yaml`.
 npm ci
 npm run dev            # preview the site
 npm run sync:deps      # regenerate index.md, public/dependency-graph.json and public/status.json
-npm run deps:drift     # print the outdated versions in the terminal
 npm run check          # format, lint, type-check, test and build
 ```
 

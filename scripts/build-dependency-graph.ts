@@ -14,8 +14,6 @@
  *
  *   npm run sync:deps              # generate the page, its data and the status snapshot
  *   npm run sync:deps -- --cache   # also reuse releases and registry answers from the last 24 hours
- *   npm run sync:deps -- --drift   # report outdated versions instead (not committed)
- *   npm run sync:deps -- --drift --outdated   # … leaving out packages that are current
  *
  * A GitHub token is read from GITHUB_TOKEN, GH_TOKEN or `gh auth token`.
  *
@@ -34,7 +32,6 @@ import {
 	collectDeployments,
 	collectDrift,
 	collectPins,
-	renderDrift,
 	type DriftResult,
 } from './dependency-graph/drift';
 import { Progress } from './dependency-graph/progress';
@@ -58,22 +55,14 @@ const FALLBACK_TAG = {
 
 interface Options {
 	cache: boolean;
-	drift: boolean;
-	outdated: boolean;
 }
 
-const FLAGS = ['--cache', '--drift', '--outdated'];
+const FLAGS = ['--cache'];
 
 function parseArgs(argv: string[]): Options {
 	const unknown = argv.filter((arg) => !FLAGS.includes(arg));
 	if (unknown.length > 0) throw new Error(`unknown option(s): ${unknown.join(', ')}`);
-	const options = {
-		cache: argv.includes('--cache'),
-		drift: argv.includes('--drift'),
-		outdated: argv.includes('--outdated'),
-	};
-	if (options.outdated && !options.drift) throw new Error('--outdated only applies to --drift');
-	return options;
+	return { cache: argv.includes('--cache') };
 }
 
 /** Reads every file of a repository that could declare a dependency. */
@@ -119,7 +108,7 @@ async function findHeads(github: GitHub, org: string): Promise<Map<string, strin
 }
 
 async function main(): Promise<void> {
-	const { cache, drift, outdated } = parseArgs(process.argv.slice(2));
+	const { cache } = parseArgs(process.argv.slice(2));
 	const config = loadConfig(ROOT);
 	const github = new GitHub({ cache, store: resolve(ROOT, STORE) });
 
@@ -227,19 +216,6 @@ async function main(): Promise<void> {
 		}
 	};
 
-	if (drift) {
-		console.log(
-			'\n' +
-				renderDrift(await collectVersions(), {
-					color: Boolean(process.stdout.isTTY) && !process.env.NO_COLOR,
-					now: new Date(),
-					onlyOutdated: outdated,
-					rank,
-				}),
-		);
-		prune();
-		return;
-	}
 	const names = new Set(repos.map((repo) => repo.name));
 	const { edges, warnings, ignoreHits } = collectEdges(files, config, maps, names, mapWarnings);
 
