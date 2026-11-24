@@ -2,7 +2,10 @@
 title: Status
 description: Outdated dependencies across the VersaTiles repositories.
 layout: page
-# Public, but a tool for the people working on VersaTiles: nobody should arrive here from a search.
+# Only built for the private area of status.versatiles.org, whose own bar is on
+# top of every page there; VitePress' bar would only repeat it.
+navbar: false
+# Behind a login, and nothing a search engine should list anyway.
 head:
   - - meta
     - name: robots
