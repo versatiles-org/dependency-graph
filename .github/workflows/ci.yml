@@ -1,11 +1,11 @@
 name: CI
 
-# The graph and the status page describe the whole organisation, so they go
-# stale whenever any other repository changes or releases. This workflow
-# therefore rebuilds them every six hours as well as on every push, and deploys
-# what it built. Nothing it generates is committed: every run reads the
-# repositories afresh, pull requests included, so that a change to the scripts
-# is built from the same data as a deploy.
+# The graph describes the whole organisation, so it goes stale whenever any
+# other repository changes. This workflow therefore rebuilds it every six hours
+# as well as on every push, and deploys what it built. Nothing it generates is
+# committed: every run reads the repositories afresh, pull requests included,
+# so that a change to the scripts is built from the same data as a deploy. The
+# status page is built by status.versatiles.org, not here.
 
 on:
   push:
@@ -25,11 +25,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # Read by the status page, which reports what is open and whether checks pass.
-      issues: read
-      pull-requests: read
-      checks: read
-      statuses: read
 
     steps:
       - name: Checkout repository
@@ -63,8 +58,10 @@ jobs:
           key: github-objects-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: github-objects-
 
+      # The graph only: status.versatiles.org builds the status page from the
+      # same code, with its own token (see the README).
       - name: Rebuild the dependency graph
-        run: npm run sync:deps
+        run: npm run sync:deps -- --no-status
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

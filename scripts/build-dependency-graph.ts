@@ -12,8 +12,9 @@
  * the status snapshot afresh and deploys them, and a local build has a page to
  * show only after this script has run.
  *
- *   npm run sync:deps              # generate the page, its data and the status snapshot
- *   npm run sync:deps -- --cache   # also reuse releases and registry answers from the last 24 hours
+ *   npm run sync:deps                  # generate the page, its data and the status snapshot
+ *   npm run sync:deps -- --cache       # also reuse releases and registry answers from the last 24 hours
+ *   npm run sync:deps -- --no-status   # the page and its data only, as the public site needs
  *
  * A GitHub token is read from GITHUB_TOKEN, GH_TOKEN or `gh auth token`.
  *
@@ -55,14 +56,16 @@ const FALLBACK_TAG = {
 
 interface Options {
 	cache: boolean;
+	/** The status snapshot is built by status.versatiles.org; the public site only needs the graph. */
+	status: boolean;
 }
 
-const FLAGS = ['--cache'];
+const FLAGS = ['--cache', '--no-status'];
 
 function parseArgs(argv: string[]): Options {
 	const unknown = argv.filter((arg) => !FLAGS.includes(arg));
 	if (unknown.length > 0) throw new Error(`unknown option(s): ${unknown.join(', ')}`);
-	return { cache: argv.includes('--cache') };
+	return { cache: argv.includes('--cache'), status: !argv.includes('--no-status') };
 }
 
 /** Reads every file of a repository that could declare a dependency. */
@@ -108,7 +111,7 @@ async function findHeads(github: GitHub, org: string): Promise<Map<string, strin
 }
 
 async function main(): Promise<void> {
-	const { cache } = parseArgs(process.argv.slice(2));
+	const { cache, status } = parseArgs(process.argv.slice(2));
 	const config = loadConfig(ROOT);
 	const github = new GitHub({ cache, store: resolve(ROOT, STORE) });
 
@@ -268,6 +271,11 @@ async function main(): Promise<void> {
 	console.log(
 		`[dependency-graph] ${graph.repos.length} repositories, ${graph.edges.length} dependencies`,
 	);
+
+	if (!status) {
+		prune();
+		return;
+	}
 
 	const collectRepos = () =>
 		collectRepoStatus(

@@ -110,6 +110,7 @@ repositories:
   'versatiles-spec': [ecosystem]
 
   'dependency-graph': [internal]
+  'status.versatiles.org': [internal]
   'node-release-tool': [internal]
 
 # Container images published by the project, and the repository that builds

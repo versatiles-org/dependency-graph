@@ -219,8 +219,10 @@ const waiting = report ? waitingOn(report) : {};
 				Data from {{ formatUtc(data.generatedAt) }}
 				<template v-if="snapshotAge">({{ snapshotAge }})</template
 				><template v-if="stale"
-					>. Updates should run every six hours, so they may have stopped.</template
-				><template v-else>. Updated every six hours.</template>
+					>. Updates should run at least every six hours, so they may have stopped.</template
+				><template v-else
+					>. Updated within ten minutes of a change, and at least every six hours.</template
+				>
 			</p>
 
 			<p v-if="driftError" class="notice failed">

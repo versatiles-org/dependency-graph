@@ -29,14 +29,17 @@ export default defineConfig({
 	description: SITE_DESCRIPTION,
 	// Served as a project site below versatiles.org, not from a domain root.
 	base: BASE,
+	// The public site has the graph only. The status page moved to the private
+	// area of status.versatiles.org; its old address forwards there.
 	srcExclude: STATUS_SITE
-		? ['README.md', 'index.md', 'no-graph.md']
-		: ['README.md', ...(GENERATED ? ['no-graph.md'] : [])],
+		? ['README.md', 'index.md', 'no-graph.md', 'status-moved.md']
+		: ['README.md', 'status/index.md', ...(GENERATED ? ['no-graph.md'] : [])],
 	rewrites: STATUS_SITE
 		? { 'status/index.md': 'index.md' }
-		: GENERATED
-			? {}
-			: { 'no-graph.md': 'index.md' },
+		: {
+				'status-moved.md': 'status/index.md',
+				...(GENERATED ? {} : { 'no-graph.md': 'index.md' }),
+			},
 	outDir: STATUS_SITE ? (process.env.STATUS_SITE_OUT ?? '.vitepress/dist-status') : undefined,
 	vite: {
 		build: {
@@ -111,7 +114,6 @@ export default defineConfig({
 				]
 			: [
 					{ text: 'Graph', link: '/', activeMatch: '^/$' },
-					{ text: 'Status', link: '/status/', activeMatch: '^/status/' },
 					{ text: 'Website', link: 'https://versatiles.org' },
 					{ text: 'Documentation', link: 'https://docs.versatiles.org' },
 				],
