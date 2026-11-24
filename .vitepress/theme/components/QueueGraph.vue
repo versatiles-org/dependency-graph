@@ -327,7 +327,10 @@ const laneColor = (index: number): string => {
 					:style="{ '--lane': laneColor(lane.index) }"
 					:class="{ faint: !laneLit(lane) }"
 				>
-					<path v-if="lane.halo" class="lane-halo" :d="lane.halo" />
+					<g v-if="lane.halo || lane.patchHalo" class="lane-halos">
+						<path v-if="lane.halo" class="lane-halo" :d="lane.halo" />
+						<path v-if="lane.patchHalo" class="lane-halo patch" :d="lane.patchHalo" />
+					</g>
 					<path
 						v-for="part in lane.parts"
 						:key="`${part.behind} ${part.waiting} ${part.tooling}`"
@@ -625,13 +628,22 @@ const laneColor = (index: number): string => {
 	}
 }
 
+/* Translucent as a group, so that halos do not darken where they meet. */
+.lane-halos {
+	opacity: 0.22;
+}
+
+/* As thin as its lines are for a patch, so that a halo does not make them look wider. */
 .lane-halo {
 	fill: none;
 	stroke: var(--lane);
 	stroke-linecap: round;
 	stroke-linejoin: round;
-	stroke-opacity: 0.22;
 	stroke-width: 11;
+
+	&.patch {
+		stroke-width: 6;
+	}
 }
 
 .lane-line {
@@ -746,6 +758,10 @@ const laneColor = (index: number): string => {
 
 .narrow .lane-halo {
 	stroke-width: 7;
+
+	&.patch {
+		stroke-width: 4;
+	}
 }
 
 .narrow .lane-line {

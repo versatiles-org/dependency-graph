@@ -229,8 +229,14 @@ export interface GraphLane {
 	parts: LanePart[];
 	/** The arrowheads pointing at its node. */
 	heads: string;
-	/** The solid lines of the lane as one path, so that it does not darken where they meet. */
+	/**
+	 * The solid lines of the lane behind by a major or minor release, as one path
+	 * for a wide halo. The page draws both halos at once, so that they do not
+	 * darken where they meet.
+	 */
 	halo: string;
+	/** The solid lines behind by a patch, for a halo as thin as they are. */
+	patchHalo: string;
 	edges: GraphEdge[];
 }
 
@@ -433,6 +439,16 @@ export function buildQueueGraph(
 			d: segments[partRank].join(' '),
 		})).filter((part) => part.d !== '');
 
+		// Only what is behind and ships: under dots, a halo would fill the gaps between them.
+		const haloOf = (patch: boolean): string => {
+			const wanted = (style: LineStyle): boolean =>
+				ships(style) && ((style.behind ?? 'patch') === 'patch') === patch;
+			return [
+				...segments.filter((_, partRank) => wanted(STYLES[partRank])).flat(),
+				...edges.filter(wanted).map((edge) => edge.line),
+			].join(' ');
+		};
+
 		return {
 			repo,
 			index,
@@ -441,13 +457,8 @@ export function buildQueueGraph(
 			x,
 			parts,
 			heads: heads.join(' '),
-			// Only what is behind and ships: under dots, a halo would fill the gaps between them.
-			halo: [
-				...segments.filter((_, partRank) => ships(STYLES[partRank])).flat(),
-				...edges.filter(ships).map((edge) => edge.line),
-			]
-				.filter(Boolean)
-				.join(' '),
+			halo: haloOf(false),
+			patchHalo: haloOf(true),
 			edges,
 		};
 	});

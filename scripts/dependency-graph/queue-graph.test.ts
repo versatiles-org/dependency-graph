@@ -172,8 +172,14 @@ describe('buildQueueGraph', () => {
 			['major', `M ${lane.x} ${y('p') + 18} L ${lane.x} ${y('b') - 14}`],
 			['patch', `M ${lane.x} ${y('b') - 14} L ${lane.x} ${y('c') - 14}`],
 		]);
-		// All three ship, so all have a halo.
-		for (const edge of lane.edges) expect(lane.halo).toContain(edge.line);
+		// All three ship, so all have a halo, a thin one for a patch.
+		const [a, b, c] = lane.edges;
+		expect(lane.halo).toContain(b.line);
+		expect(lane.halo).toContain(lane.parts[0].d);
+		for (const patch of [a.line, c.line, lane.parts[1].d]) {
+			expect(lane.patchHalo).toContain(patch);
+			expect(lane.halo).not.toContain(patch);
+		}
 	});
 
 	it('gives a tooling line no halo, which would fill the gaps between its dots', () => {
