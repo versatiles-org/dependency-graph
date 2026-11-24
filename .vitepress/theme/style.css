@@ -45,6 +45,20 @@
 }
 
 /**
+ * Monospace font
+ *
+ * Bundled rather than left to the system: system monospace fonts mostly have
+ * only regular and bold, and the status page sets version numbers in three
+ * weights. The system fonts stay as the fallback while it loads.
+ * -------------------------------------------------------------------------- */
+
+:root {
+	--vp-font-family-mono:
+		'JetBrains Mono Variable', ui-monospace, 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono',
+		'Courier New', monospace;
+}
+
+/**
  * Component: Button
  * -------------------------------------------------------------------------- */
 

@@ -10,6 +10,10 @@
  * depends on is further up. A cycle is the one exception, and bends downwards
  * instead.
  *
+ * How far it is behind shows in its dot, not in a colour, since colour already
+ * means the package: empty for a patch, half filled for a minor, filled for a
+ * major release. A line that only waits has no dot.
+ *
  * Two things are told apart, independently: a thick line is behind now, a thin
  * one waits, and will be behind once its package is released; dots mean only
  * development tooling, which never reaches released code. A repository in the
@@ -178,6 +182,21 @@ export interface GraphEdge extends LineStyle {
 	 * it stands for, so that the lines of one row never share a path.
 	 */
 	y: number;
+	/**
+	 * The biggest step among the usages it stands for, which the dot shows; null
+	 * for a line that only waits.
+	 */
+	behind: Behind | null;
+}
+
+type Behind = NonNullable<OutdatedUsage['behind']>;
+
+/** Biggest first. */
+const STEPS: readonly Behind[] = ['major', 'minor', 'patch'];
+
+/** The biggest step among some usages, or null when none of them is behind. */
+export function biggestStep(usages: Pick<OutdatedUsage, 'behind'>[]): Behind | null {
+	return STEPS.find((step) => usages.some((usage) => usage.behind === step)) ?? null;
 }
 
 export interface LanePart extends LineStyle {
@@ -292,7 +311,12 @@ export function buildQueueGraph(
 		released.length > 0 ? m.releasesTop + released.length * m.rowHeight + 8 : m.firstLabelTop;
 	let next = queueLabelTop + m.groupGap - 8;
 	/** Every line from a row in the queue to a lane, in the order of the rows. */
-	const lines: (LineStyle & { consumer: string; lane: number; y: number })[] = [];
+	const lines: (LineStyle & {
+		consumer: string;
+		lane: number;
+		y: number;
+		behind: Behind | null;
+	})[] = [];
 	const queueRows = queue.map((entry): GraphRow => {
 		// What it only waits for gets a line of its own, after what it is behind on.
 		const behind = new Set(entry.outdated.map((usage) => usage.provider));
@@ -330,6 +354,7 @@ export function buildQueueGraph(
 				y: top + usages[0].y,
 				waiting: false,
 				tooling: usages.every((usage) => usage.tooling),
+				behind: biggestStep(usages),
 			});
 		}
 		waits.forEach((wait, index) => {
@@ -339,6 +364,7 @@ export function buildQueueGraph(
 				y: top + rowWaits[index].y,
 				waiting: true,
 				tooling: wait.tooling,
+				behind: null,
 			});
 		});
 
@@ -366,13 +392,14 @@ export function buildQueueGraph(
 
 		const edges = lines
 			.filter((each) => each.lane === index)
-			.map(({ consumer, y, waiting, tooling }): GraphEdge => ({
+			.map(({ consumer, y, waiting, tooling, behind }): GraphEdge => ({
 				consumer,
 				provider: repo,
 				line: edgeLine(m.nodeX, x, y, own.y, m.curve),
 				y,
 				waiting,
 				tooling,
+				behind,
 			}));
 
 		const segments: string[][] = STYLES.map(() => []);

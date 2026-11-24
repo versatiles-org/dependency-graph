@@ -1,6 +1,8 @@
 // https://vitepress.dev/guide/custom-theme
 import { inBrowser, type Theme } from 'vitepress';
 import DefaultTheme from 'vitepress/theme';
+// Variable, so version numbers can be light, regular and bold on every system.
+import '@fontsource-variable/jetbrains-mono';
 import './style.css';
 import DependencyGraph from './components/DependencyGraph.vue';
 import StatusPage from './components/StatusPage.vue';

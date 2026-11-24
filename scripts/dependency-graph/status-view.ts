@@ -96,6 +96,39 @@ export function formatTime(date: string): string {
 	return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute} ${p.timeZoneName}`;
 }
 
+/** Which number of `major.minor.patch` a step of each size changes. */
+const CHANGED_NUMBER = { major: 0, minor: 1, patch: 2 } as const;
+
+/**
+ * A version split around the number a step of `behind` changes, so that the
+ * page can set that number apart: `2.4.0` and `minor` give `2.`, `4` and `.0`.
+ * A version that is not `major.minor.patch`, or no step, stays whole in `before`.
+ */
+export function splitVersion(
+	version: string,
+	behind: Finding['behind'],
+): { before: string; changed: string; after: string } {
+	const match = /^(\D*)(\d+)\.(\d+)\.(\d+)(.*)$/.exec(version);
+	if (match === null || behind === null) return { before: version, changed: '', after: '' };
+	const [, prefix, major, minor, patch, suffix] = match;
+	const numbers = [major, minor, patch];
+	const index = CHANGED_NUMBER[behind];
+	return {
+		before:
+			prefix +
+			numbers
+				.slice(0, index)
+				.map((number) => `${number}.`)
+				.join(''),
+		changed: numbers[index],
+		after:
+			numbers
+				.slice(index + 1)
+				.map((number) => `.${number}`)
+				.join('') + suffix,
+	};
+}
+
 /** "2026-11-24", the day in German time. */
 export function formatDate(date: string): string {
 	const p = germanTime(date);

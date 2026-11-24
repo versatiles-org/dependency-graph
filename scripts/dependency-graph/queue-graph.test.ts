@@ -135,6 +135,26 @@ describe('buildQueueGraph', () => {
 		expect(lines(usage('a', 'p', { section: 'devDependencies' }))).toBe(false);
 	});
 
+	it('gives a line the biggest step among the usages it stands for', () => {
+		const step = (...behind: OutdatedUsage['behind'][]) =>
+			buildQueueGraph(
+				[
+					entry(
+						1,
+						'a',
+						...behind.map((each, index) =>
+							usage('a', 'p', { name: `${index}`, behind: each }),
+						),
+					),
+				],
+				{},
+			).lanes[0].edges[0].behind;
+		expect(step('patch')).toBe('patch');
+		expect(step('patch', 'minor')).toBe('minor');
+		expect(step('minor', 'major', 'patch')).toBe('major');
+		expect(step(null)).toBeNull();
+	});
+
 	it('gives a tooling line no halo, which would fill the gaps between its dots', () => {
 		const [lane] = buildQueueGraph(
 			[entry(1, 'a', usage('a', 'p', { section: 'devDependencies', tooling: true }))],
@@ -315,9 +335,10 @@ describe('buildQueueGraph', () => {
 				{ tools: waits('container') },
 			);
 			const lane = graph.lanes.find((each) => each.repo === 'container')!;
-			expect(lane.edges.map((edge) => [edge.consumer, edge.waiting])).toEqual([
-				['server', false],
-				['tools', true],
+			expect(lane.edges.map((edge) => [edge.consumer, edge.waiting, edge.behind])).toEqual([
+				['server', false, 'minor'],
+				// Not behind yet, so its line has no dot to fill.
+				['tools', true, null],
 			]);
 			expect(lane.color).not.toBeNull();
 			// The lane is thick as far as a line that is behind joins it, and thin after that.

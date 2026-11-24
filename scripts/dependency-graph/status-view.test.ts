@@ -22,6 +22,7 @@ import {
 	isStale,
 	listRepos,
 	pinLocation,
+	splitVersion,
 	waitingOn,
 } from './status-view';
 
@@ -50,6 +51,29 @@ describe('times', () => {
 		expect(formatTime('2026-11-01T10:43:03.727Z')).toBe('2026-11-01 11:43 CET');
 		expect(formatTime('2026-07-01T10:05:00Z')).toBe('2026-07-01 12:05 CEST');
 		expect(formatDate('2026-11-23T23:30:00Z')).toBe('2026-11-24');
+	});
+});
+
+describe('splitVersion', () => {
+	it('splits a version around the number a step changes', () => {
+		expect(splitVersion('2.4.1', 'major')).toEqual({ before: '', changed: '2', after: '.4.1' });
+		expect(splitVersion('2.4.1', 'minor')).toEqual({ before: '2.', changed: '4', after: '.1' });
+		expect(splitVersion('2.4.1', 'patch')).toEqual({ before: '2.4.', changed: '1', after: '' });
+	});
+
+	it('keeps a prefix and a pre-release with the numbers around them', () => {
+		expect(splitVersion('v10.0.0-beta.2', 'major')).toEqual({
+			before: 'v',
+			changed: '10',
+			after: '.0.0-beta.2',
+		});
+	});
+
+	it('leaves anything else whole', () => {
+		const whole = (version: string) => ({ before: version, changed: '', after: '' });
+		expect(splitVersion('2.4.1', null)).toEqual(whole('2.4.1'));
+		expect(splitVersion('2024-05-01', 'minor')).toEqual(whole('2024-05-01'));
+		expect(splitVersion('latest', 'major')).toEqual(whole('latest'));
 	});
 });
 

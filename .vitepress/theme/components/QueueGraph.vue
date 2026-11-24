@@ -18,6 +18,8 @@ import {
 	type GraphEdge,
 	type GraphRow,
 } from '../../../scripts/dependency-graph/queue-graph';
+import StepIcon from './StepIcon.vue';
+import VersionChange from './VersionChange.vue';
 
 const props = defineProps<{
 	queue: QueueEntry[];
@@ -87,6 +89,14 @@ const rowBackground = (row: GraphRow, index: number): string =>
 		: banded(row, index)
 			? 'var(--vp-c-bg-soft)'
 			: 'var(--vp-c-bg)';
+/** What the dot of a line sits on, so that an empty or half-filled dot hides the line under it. */
+const edgeBackground = (edge: GraphEdge): string => {
+	const index = graph.value.rows.findIndex((row) => row.repo === edge.consumer);
+	return index < 0 ? 'var(--vp-c-bg)' : rowBackground(graph.value.rows[index], index);
+};
+/** The right half of a dot, as on a minor step. */
+const halfDot = (x: number, y: number, r: number): string =>
+	`M ${x} ${y - r} A ${r} ${r} 0 0 1 ${x} ${y + r} Z`;
 const togglePin = (repo: string): void => {
 	pinned.value = pinned.value === repo ? null : repo;
 };
@@ -115,6 +125,13 @@ const laneColor = (index: number): string => {
 				<path d="M 2 4 L 30 4" class="graph-key-waiting" />
 			</svg>
 			Not behind yet, but will be once that one is released
+		</li>
+		<li>
+			<span class="graph-key-steps">
+				<StepIcon step="patch" /> patch <StepIcon step="minor" /> minor
+				<StepIcon step="major" /> major
+			</span>
+			How far behind; the dot a line starts at shows its biggest step
 		</li>
 		<li>
 			<span class="mark is-range" aria-hidden="true">{{ STATUS.range.mark }}</span>
@@ -217,6 +234,7 @@ const laneColor = (index: number): string => {
 							:title="STATUS[detail.status].label"
 						>
 							<span class="mark" aria-hidden="true">{{ STATUS[detail.status].mark }}</span>
+							<StepIcon v-if="detail.behind" :step="detail.behind" />
 							{{ detail.behind }}
 							<a
 								:href="fileUrl(detail.consumer, detail.path)"
@@ -226,9 +244,11 @@ const laneColor = (index: number): string => {
 							>
 						</span>
 						<span class="row-update" :style="{ top: `${detail.y + 18}px` }">
-							<span class="mono"
-								>{{ detail.installed ?? '—' }} → {{ detail.latest ?? '?' }}</span
-							>
+							<VersionChange
+								:installed="detail.installed"
+								:latest="detail.latest"
+								:behind="detail.behind"
+							/>
 							<span v-if="detail.tooling" class="tooling">tooling</span>
 						</span>
 					</template>
@@ -240,6 +260,7 @@ const laneColor = (index: number): string => {
 							:title="STATUS[detail.status].label"
 						>
 							<span class="mark" aria-hidden="true">{{ STATUS[detail.status].mark }}</span>
+							<StepIcon v-if="detail.behind" :step="detail.behind" />
 							{{ detail.behind }}
 						</span>
 						<span
@@ -252,9 +273,11 @@ const laneColor = (index: number): string => {
 								:style="{ color: laneColor(detail.lane) }"
 								>{{ graph.lanes[detail.lane].label }}</a
 							>
-							<span class="mono"
-								>{{ detail.installed ?? '—' }} → {{ detail.latest ?? '?' }}</span
-							>
+							<VersionChange
+								:installed="detail.installed"
+								:latest="detail.latest"
+								:behind="detail.behind"
+							/>
 							<span v-if="detail.tooling" class="tooling">tooling</span>
 						</span>
 					</template>
@@ -305,15 +328,20 @@ const laneColor = (index: number): string => {
 						}"
 						:d="edge.line"
 					/>
-					<circle
-						v-for="edge in lane.edges"
-						:key="`dot ${edge.consumer}`"
-						class="graph-dot"
-						:class="{ faint: !edgeLit(edge) }"
-						:cx="metrics.nodeX"
-						:cy="edge.y"
-						:r="metrics.dotRadius"
-					/>
+					<template v-for="edge in lane.edges" :key="`dot ${edge.consumer}`">
+						<g
+							v-if="edge.behind"
+							class="graph-dot"
+							:class="[`step-${edge.behind}`, { faint: !edgeLit(edge) }]"
+							:style="{ '--dot-bg': edgeBackground(edge) }"
+						>
+							<circle :cx="metrics.nodeX" :cy="edge.y" :r="metrics.dotRadius" />
+							<path
+								v-if="edge.behind === 'minor'"
+								:d="halfDot(metrics.nodeX, edge.y, metrics.dotRadius)"
+							/>
+						</g>
+					</template>
 				</g>
 				<g
 					v-for="(row, index) in graph.rows"
@@ -363,6 +391,17 @@ const laneColor = (index: number): string => {
 		display: flex;
 		align-items: center;
 		gap: 8px;
+	}
+}
+
+.graph-key-steps {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	color: var(--vp-c-text-1);
+
+	:deep(.step-icon):not(:first-child) {
+		margin-left: 6px;
 	}
 }
 
@@ -533,16 +572,27 @@ const laneColor = (index: number): string => {
 	}
 }
 
+/*
+ * Colour means the package here, so neither how far behind nor why may take one:
+ * the step shows in its symbol and weight, the reason in its mark.
+ */
+.mark {
+	color: var(--vp-c-text-2);
+}
+
 .behind-major {
-	color: var(--vp-c-danger-1);
+	color: var(--vp-c-text-1);
+	font-weight: 700;
 }
 
 .behind-minor {
-	color: var(--vp-c-warning-1);
+	color: var(--vp-c-text-1);
+	font-weight: 500;
 }
 
 .behind-patch {
 	color: var(--vp-c-text-2);
+	font-weight: 300;
 }
 
 .graph-lines {
@@ -588,8 +638,21 @@ const laneColor = (index: number): string => {
 	fill: var(--lane);
 }
 
+/* Filled as far as it is behind: empty for a patch, half for a minor, full for a major release. */
 .graph-dot {
-	fill: var(--lane);
+	circle {
+		fill: var(--lane);
+		stroke: var(--lane);
+		stroke-width: 1.5;
+	}
+
+	path {
+		fill: var(--lane);
+	}
+
+	&:is(.step-patch, .step-minor) circle {
+		fill: var(--dot-bg);
+	}
 }
 
 .row-wait {
