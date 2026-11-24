@@ -17,6 +17,7 @@ import {
 	WIDE,
 	type GraphEdge,
 	type GraphRow,
+	type LineStyle,
 } from '../../../scripts/dependency-graph/queue-graph';
 import StepIcon from './StepIcon.vue';
 import VersionChange from './VersionChange.vue';
@@ -94,6 +95,12 @@ const edgeBackground = (edge: GraphEdge): string => {
 	const index = graph.value.rows.findIndex((row) => row.repo === edge.consumer);
 	return index < 0 ? 'var(--vp-c-bg)' : rowBackground(graph.value.rows[index], index);
 };
+/** Width by step, thinnest when it only waits, and dots for tooling. */
+const lineClass = (style: LineStyle): Record<string, boolean> => ({
+	tooling: style.tooling,
+	waiting: style.waiting,
+	[`step-${style.behind ?? 'patch'}`]: !style.waiting,
+});
 /** The right half of a dot, as on a minor step. */
 const halfDot = (x: number, y: number, r: number): string =>
 	`M ${x} ${y - r} A ${r} ${r} 0 0 1 ${x} ${y + r} Z`;
@@ -128,10 +135,22 @@ const laneColor = (index: number): string => {
 		</li>
 		<li>
 			<span class="graph-key-steps">
-				<StepIcon step="patch" /> patch <StepIcon step="minor" /> minor
-				<StepIcon step="major" /> major
+				<template v-for="step in ['patch', 'minor', 'major'] as const" :key="step">
+					<svg width="30" height="12" viewBox="0 0 30 12" aria-hidden="true">
+						<path
+							d="M 6 6 L 28 6"
+							class="lane-line"
+							:class="lineClass({ behind: step, waiting: false, tooling: false })"
+						/>
+						<g class="graph-dot" :class="`step-${step}`">
+							<circle cx="6" cy="6" r="4.5" />
+							<path v-if="step === 'minor'" :d="halfDot(6, 6, 4.5)" />
+						</g>
+					</svg>
+					{{ step }}
+				</template>
 			</span>
-			How far behind; the dot a line starts at shows its biggest step
+			How far behind, in the width of a line and its dot
 		</li>
 		<li>
 			<span class="mark is-range" aria-hidden="true">{{ STATUS.range.mark }}</span>
@@ -311,9 +330,9 @@ const laneColor = (index: number): string => {
 					<path v-if="lane.halo" class="lane-halo" :d="lane.halo" />
 					<path
 						v-for="part in lane.parts"
-						:key="`${part.waiting} ${part.tooling}`"
+						:key="`${part.behind} ${part.waiting} ${part.tooling}`"
 						class="lane-line"
-						:class="{ tooling: part.tooling, waiting: part.waiting }"
+						:class="lineClass(part)"
 						:d="part.d"
 					/>
 					<path class="lane-head" :d="lane.heads" />
@@ -321,11 +340,7 @@ const laneColor = (index: number): string => {
 						v-for="edge in lane.edges"
 						:key="edge.consumer"
 						class="lane-line"
-						:class="{
-							tooling: edge.tooling,
-							waiting: edge.waiting,
-							faint: !edgeLit(edge),
-						}"
+						:class="[lineClass(edge), { faint: !edgeLit(edge) }]"
 						:d="edge.line"
 					/>
 					<template v-for="edge in lane.edges" :key="`dot ${edge.consumer}`">
@@ -400,7 +415,11 @@ const laneColor = (index: number): string => {
 	gap: 4px;
 	color: var(--vp-c-text-1);
 
-	:deep(.step-icon):not(:first-child) {
+	/* Drawn like a line in the graph, in the colour of the text. */
+	--lane: var(--vp-c-text-2);
+	--dot-bg: var(--vp-c-bg);
+
+	svg:not(:first-child) {
 		margin-left: 6px;
 	}
 }
@@ -419,7 +438,7 @@ const laneColor = (index: number): string => {
 	fill: none;
 	stroke: var(--vp-c-text-2);
 	stroke-linecap: round;
-	stroke-width: 1.5;
+	stroke-width: 1;
 }
 
 .graph {
@@ -619,18 +638,39 @@ const laneColor = (index: number): string => {
 	fill: none;
 	stroke: var(--lane);
 	stroke-linecap: round;
-	stroke-width: 3;
 
 	/*
-	 * Thickness says whether it is behind now or only waits; round dots say it is
-	 * only development tooling. Unlike dashes, dots cannot be mistaken for a line.
+	 * Width says how far behind, like the dot: widest for a major release, and
+	 * thinner than any step when it only waits. Round dots say it is only
+	 * development tooling; unlike dashes, dots cannot be mistaken for a line.
+	 * Their gaps grow with the width, so that wide dots do not merge into one.
 	 */
+	&.step-major {
+		stroke-width: 4.5;
+	}
+
+	&.step-minor {
+		stroke-width: 3;
+	}
+
+	&.step-patch {
+		stroke-width: 1.75;
+	}
+
+	&.waiting {
+		stroke-width: 1;
+	}
+
 	&.tooling {
 		stroke-dasharray: 0 5;
 	}
 
-	&.waiting {
-		stroke-width: 1.5;
+	&.tooling.step-major {
+		stroke-dasharray: 0 8;
+	}
+
+	&.tooling:is(.step-patch, .waiting) {
+		stroke-dasharray: 0 4;
 	}
 }
 
@@ -708,7 +748,17 @@ const laneColor = (index: number): string => {
 	stroke-width: 7;
 }
 
-.narrow .lane-line:not(.waiting) {
-	stroke-width: 2.5;
+.narrow .lane-line {
+	&.step-major {
+		stroke-width: 3.5;
+	}
+
+	&.step-minor {
+		stroke-width: 2.25;
+	}
+
+	&.step-patch {
+		stroke-width: 1.5;
+	}
 }
 </style>

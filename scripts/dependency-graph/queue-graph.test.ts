@@ -155,6 +155,27 @@ describe('buildQueueGraph', () => {
 		expect(step(null)).toBeNull();
 	});
 
+	it('draws a lane as wide as the biggest step still to join it', () => {
+		const graph = buildQueueGraph(
+			[
+				entry(1, 'p', usage('p', 'x')),
+				entry(2, 'a', usage('a', 'p', { behind: 'patch' })),
+				entry(3, 'b', usage('b', 'p', { behind: 'major' })),
+				entry(4, 'c', usage('c', 'p', { behind: 'patch' })),
+			],
+			{},
+		);
+		const lane = graph.lanes.find((each) => each.repo === 'p')!;
+		const y = (repo: string) => graph.rows.find((row) => row.repo === repo)!.y;
+		// Major as far as b joins, though a joins first with a patch; patch after that.
+		expect(lane.parts.map((each) => [each.behind, each.d])).toEqual([
+			['major', `M ${lane.x} ${y('p') + 18} L ${lane.x} ${y('b') - 14}`],
+			['patch', `M ${lane.x} ${y('b') - 14} L ${lane.x} ${y('c') - 14}`],
+		]);
+		// All three ship, so all have a halo.
+		for (const edge of lane.edges) expect(lane.halo).toContain(edge.line);
+	});
+
 	it('gives a tooling line no halo, which would fill the gaps between its dots', () => {
 		const [lane] = buildQueueGraph(
 			[entry(1, 'a', usage('a', 'p', { section: 'devDependencies', tooling: true }))],

@@ -6,7 +6,12 @@ import globals from 'globals';
 
 export default tseslint.config(
 	{
-		ignores: ['.vitepress/dist/**', '.vitepress/cache/**', 'node_modules/**'],
+		ignores: [
+			'.vitepress/dist/**',
+			'.vitepress/dist-status/**',
+			'.vitepress/cache/**',
+			'node_modules/**',
+		],
 	},
 	js.configs.recommended,
 	...tseslint.configs.recommendedTypeChecked,
