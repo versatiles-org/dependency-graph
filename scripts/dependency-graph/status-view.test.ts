@@ -16,7 +16,8 @@ import {
 	filterDeployments,
 	filterDrift,
 	filterPins,
-	formatUtc,
+	formatDate,
+	formatTime,
 	hoursAgo,
 	isStale,
 	listRepos,
@@ -45,8 +46,10 @@ describe('times', () => {
 		expect(isStale('2026-10-31T23:59:00Z', now)).toBe(true);
 	});
 
-	it('formats a date without depending on the time zone', () => {
-		expect(formatUtc('2026-11-01T10:43:03.727Z')).toBe('2026-11-01 10:43 UTC');
+	it('formats in German time, whatever time zone the machine is in', () => {
+		expect(formatTime('2026-11-01T10:43:03.727Z')).toBe('2026-11-01 11:43 CET');
+		expect(formatTime('2026-07-01T10:05:00Z')).toBe('2026-07-01 12:05 CEST');
+		expect(formatDate('2026-11-23T23:30:00Z')).toBe('2026-11-24');
 	});
 });
 

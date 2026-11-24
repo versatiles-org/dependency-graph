@@ -68,9 +68,38 @@ export function isStale(date: string, now: Date): boolean {
 	return now.getTime() - new Date(date).getTime() > STALE_AFTER_HOURS * HOUR;
 }
 
-/** The same text wherever it is rendered, so the server and the browser agree. */
-export function formatUtc(date: string): string {
-	return `${new Date(date).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+/*
+ * In German time, where the people reading the page are. With the time zone
+ * fixed, the text is the same wherever it is rendered, so the server and the
+ * browser agree.
+ */
+const GERMAN_TIME = new Intl.DateTimeFormat('en-GB', {
+	timeZone: 'Europe/Berlin',
+	year: 'numeric',
+	month: '2-digit',
+	day: '2-digit',
+	hour: '2-digit',
+	minute: '2-digit',
+	hourCycle: 'h23',
+	timeZoneName: 'short',
+});
+
+function germanTime(date: string): Record<string, string> {
+	return Object.fromEntries(
+		GERMAN_TIME.formatToParts(new Date(date)).map((part) => [part.type, part.value]),
+	);
+}
+
+/** "2026-11-24 01:30 CET" */
+export function formatTime(date: string): string {
+	const p = germanTime(date);
+	return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute} ${p.timeZoneName}`;
+}
+
+/** "2026-11-24", the day in German time. */
+export function formatDate(date: string): string {
+	const p = germanTime(date);
+	return `${p.year}-${p.month}-${p.day}`;
 }
 
 /** Where a pinned version was found: a file, an image, or a release's notes. */

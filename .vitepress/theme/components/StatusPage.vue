@@ -9,7 +9,8 @@ import {
 	filterDeployments,
 	filterDrift,
 	filterPins,
-	formatUtc,
+	formatDate,
+	formatTime,
 	hoursAgo,
 	isStale,
 	listRepos,
@@ -69,7 +70,7 @@ const filtering = computed(() => query.value.trim() !== '' || hideTooling.value)
 const listedRepos = computed(() => listRepos(repoStatus ?? [], query.value));
 const listedPins = computed(() => filterPins(report?.pins ?? [], query.value));
 const listedDeployments = computed(() => filterDeployments(report?.deployments ?? [], query.value));
-const when = (date: string): string => (now.value ? daysAgo(date, now.value) : date.slice(0, 10));
+const when = (date: string): string => (now.value ? daysAgo(date, now.value) : formatDate(date));
 
 /*
  * One tab for each part of the page. A tab's id is the id its section had, so
@@ -216,7 +217,7 @@ const waiting = report ? waitingOn(report) : {};
 
 		<template v-else>
 			<p class="snapshot" :class="{ stale }">
-				Data from {{ formatUtc(data.generatedAt) }}
+				Data from {{ formatTime(data.generatedAt) }}
 				<template v-if="snapshotAge">({{ snapshotAge }})</template
 				><template v-if="stale"
 					>. Updates should run at least every six hours, so they may have stopped.</template
@@ -606,7 +607,7 @@ const waiting = report ? waitingOn(report) : {};
 										{{
 											now
 												? daysAgo(entry.release.date, now)
-												: entry.release.date.slice(0, 10)
+												: formatDate(entry.release.date)
 										}}
 									</template>
 								</span>
