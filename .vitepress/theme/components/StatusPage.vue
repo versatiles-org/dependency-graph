@@ -883,6 +883,12 @@ section {
 }
 
 .tab {
+	/*
+	 * Holds the visually hidden text of the badge, which VitePress positions
+	 * absolutely. Without this it would escape the scrolling row and widen the
+	 * whole page on a phone.
+	 */
+	position: relative;
 	display: inline-flex;
 	flex: none;
 	align-items: center;
