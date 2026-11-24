@@ -21,7 +21,10 @@ npm ci
 npm run dev            # preview the site
 npm run sync:deps      # regenerate index.md, public/dependency-graph.json and public/status.json
 npm run check          # format, lint, type-check, test and build
+npm run build:status   # build the status page alone, for status.versatiles.org (see below)
 ```
+
+status.versatiles.org builds the status page a second time, alone, for its private area: it runs `npm run sync:deps` and `npm run build:status` on its server. `STATUS_SITE_BASE` sets the base path (default `/private/dependency-status/`) and `STATUS_SITE_OUT` the output folder (default `.vitepress/dist-status`).
 
 `npm run check` deliberately doesn't read GitHub, so a change in another repository can't fail it.
 

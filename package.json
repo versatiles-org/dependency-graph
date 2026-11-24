@@ -13,6 +13,7 @@
   },
   "scripts": {
     "build": "vitepress build .",
+    "build:status": "STATUS_SITE=1 vitepress build .",
     "sync:deps": "tsx scripts/build-dependency-graph.ts",
     "test": "vitest run",
     "check": "npm run format && npm run lint && npm run lint:types && npm run test && npm run build",

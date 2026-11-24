@@ -9,8 +9,18 @@ import { defineConfig } from 'vitepress';
  */
 const GENERATED = existsSync(fileURLToPath(new URL('../index.md', import.meta.url)));
 
-const BASE = '/dependency-graph/';
+/**
+ * `npm run build:status` sets STATUS_SITE and builds the status page alone, as
+ * the front page of a site of its own: status.versatiles.org serves it in its
+ * private area. STATUS_SITE_BASE and STATUS_SITE_OUT say where.
+ */
+const STATUS_SITE = process.env.STATUS_SITE === '1';
+
+const BASE = STATUS_SITE
+	? (process.env.STATUS_SITE_BASE ?? '/private/dependency-status/')
+	: '/dependency-graph/';
 const SITE_URL = `https://versatiles.org${BASE}`;
+const GRAPH_URL = 'https://versatiles.org/dependency-graph/';
 const SITE_TITLE = 'VersaTiles Dependency Graph';
 const SITE_DESCRIPTION = 'How the VersaTiles repositories build on each other.';
 
@@ -19,8 +29,15 @@ export default defineConfig({
 	description: SITE_DESCRIPTION,
 	// Served as a project site below versatiles.org, not from a domain root.
 	base: BASE,
-	srcExclude: ['README.md', ...(GENERATED ? ['no-graph.md'] : [])],
-	rewrites: GENERATED ? {} : { 'no-graph.md': 'index.md' },
+	srcExclude: STATUS_SITE
+		? ['README.md', 'index.md', 'no-graph.md']
+		: ['README.md', ...(GENERATED ? ['no-graph.md'] : [])],
+	rewrites: STATUS_SITE
+		? { 'status/index.md': 'index.md' }
+		: GENERATED
+			? {}
+			: { 'no-graph.md': 'index.md' },
+	outDir: STATUS_SITE ? (process.env.STATUS_SITE_OUT ?? '.vitepress/dist-status') : undefined,
 	vite: {
 		build: {
 			target: 'esnext',
@@ -33,6 +50,8 @@ export default defineConfig({
 	},
 	// Everything that names the page it is on, so a second page cannot claim to be the first.
 	transformHead({ pageData }) {
+		// The status site is private: nothing to link to or share.
+		if (STATUS_SITE) return [];
 		const url = `${SITE_URL}${pageData.relativePath.replace(/(^|\/)index\.md$/, '$1').replace(/\.md$/, '.html')}`;
 		const { title, description } = pageData.frontmatter as {
 			title?: string;
@@ -83,12 +102,19 @@ export default defineConfig({
 	themeConfig: {
 		logo: '/versatiles.svg',
 		logoLink: 'https://versatiles.org',
-		nav: [
-			{ text: 'Graph', link: '/', activeMatch: '^/$' },
-			{ text: 'Status', link: '/status/', activeMatch: '^/status/' },
-			{ text: 'Website', link: 'https://versatiles.org' },
-			{ text: 'Documentation', link: 'https://docs.versatiles.org' },
-		],
+		nav: STATUS_SITE
+			? [
+					{ text: 'Graph', link: GRAPH_URL },
+					{ text: 'Status', link: '/', activeMatch: '^/$' },
+					{ text: 'Website', link: 'https://versatiles.org' },
+					{ text: 'Documentation', link: 'https://docs.versatiles.org' },
+				]
+			: [
+					{ text: 'Graph', link: '/', activeMatch: '^/$' },
+					{ text: 'Status', link: '/status/', activeMatch: '^/status/' },
+					{ text: 'Website', link: 'https://versatiles.org' },
+					{ text: 'Documentation', link: 'https://docs.versatiles.org' },
+				],
 		socialLinks: [{ icon: 'github', link: 'https://github.com/versatiles-org/dependency-graph' }],
 		footer: {
 			message: 'Released under Unlicense',
