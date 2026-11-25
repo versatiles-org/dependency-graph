@@ -5,6 +5,7 @@ import DefaultTheme from 'vitepress/theme';
 import '@fontsource-variable/jetbrains-mono';
 import './style.css';
 import DependencyGraph from './components/DependencyGraph.vue';
+import IssuesPage from './components/IssuesPage.vue';
 import StatusPage from './components/StatusPage.vue';
 
 export default {
@@ -16,5 +17,6 @@ export default {
 
 		app.component('DependencyGraph', DependencyGraph);
 		app.component('StatusPage', StatusPage);
+		app.component('IssuesPage', IssuesPage);
 	},
 } satisfies Theme;

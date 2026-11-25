@@ -33,9 +33,9 @@ export default defineConfig({
 	// area of status.versatiles.org; its old address forwards there.
 	srcExclude: STATUS_SITE
 		? ['README.md', 'index.md', 'no-graph.md', 'status-moved.md']
-		: ['README.md', 'status/index.md', ...(GENERATED ? ['no-graph.md'] : [])],
+		: ['README.md', 'status/index.md', 'status/issues.md', ...(GENERATED ? ['no-graph.md'] : [])],
 	rewrites: STATUS_SITE
-		? { 'status/index.md': 'index.md' }
+		? { 'status/index.md': 'index.md', 'status/issues.md': 'issues/index.md' }
 		: {
 				'status-moved.md': 'status/index.md',
 				...(GENERATED ? {} : { 'no-graph.md': 'index.md' }),
