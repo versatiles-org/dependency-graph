@@ -382,6 +382,22 @@ export class GitHub {
 		return body === null ? null : (JSON.parse(body) as T);
 	}
 
+	/**
+	 * Every item of a paged REST listing, such as `/orgs/x/code-scanning/alerts?state=open`.
+	 * A listing that doesn't exist counts as a failure, not as an empty one.
+	 */
+	async listAll<T>(path: string): Promise<T[]> {
+		const items: T[] = [];
+		const separator = path.includes('?') ? '&' : '?';
+		for (let page = 1; ; page++) {
+			const url = `${API}${path}${separator}per_page=100&page=${page}`;
+			const batch = await this.getJson<T[]>(url);
+			if (batch === null) throw new Error(`404 Not Found for ${url}`);
+			items.push(...batch);
+			if (batch.length < 100) return items;
+		}
+	}
+
 	/** Tag, date and notes of the latest release of a repository, or null if it has none. */
 	async latestRelease(
 		org: string,

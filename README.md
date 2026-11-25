@@ -14,6 +14,8 @@ The workflow in `.github/workflows/ci.yml` runs every six hours, on every push t
 
 The status page is built by status.versatiles.org, from this repo's code: within ten minutes of a change in any public repository (through an organisation webhook), and at least every six hours. If the status snapshot can't be collected, the page shows the error.
 
+The snapshot also holds what no page here shows: each repository's `.trivyignore` entries, and the open Dependabot and code scanning alerts (`security`), which another page behind the same login reads. The alerts are not public, so the snapshot must only ever be served behind a login. They need the GitHub App's "Dependabot alerts" and "Code scanning alerts" permissions; without them only that section fails.
+
 To correct or extend the graph, edit `scripts/dependency-graph.yaml`.
 
 ## Development

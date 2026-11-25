@@ -311,6 +311,7 @@ describe('unreleasedByRepo', () => {
 		lastCommit: null,
 		release: { tag: 'v1.0.0', date: '2026-10-01T00:00:00Z' },
 		unreleased: 4,
+		trivyIgnore: null,
 		...overrides,
 	});
 

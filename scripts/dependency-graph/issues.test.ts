@@ -212,6 +212,7 @@ describe('collectIssues', () => {
 		lastCommit: null,
 		release: { tag: 'v1.0.0', date: '2026-10-01T00:00:00Z' },
 		unreleased: 3,
+		trivyIgnore: null,
 		...overrides,
 	});
 

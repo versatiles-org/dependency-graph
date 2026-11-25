@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { assess, type Usage } from './drift';
 import type { IssueReport } from './issues';
 import type { RepoStatus } from './repo-status';
+import type { SecurityAlert } from './security';
 import { buildStatusSnapshot, readStatusSnapshot, renderStatusJson } from './status';
 
 const options = { org: 'versatiles-org', now: new Date('2026-11-01T12:00:00Z') };
@@ -37,6 +38,7 @@ const repo: RepoStatus = {
 	lastCommit: null,
 	release: null,
 	unreleased: null,
+	trivyIgnore: null,
 };
 const repos = () => Promise.resolve([repo]);
 const down = () => Promise.reject(new Error('503'));
@@ -44,16 +46,27 @@ const down = () => Promise.reject(new Error('503'));
 const report: IssueReport = { open: [], closed: [], unreleased: null };
 const issues = () => Promise.resolve(report);
 
+const alert: SecurityAlert = {
+	repo: 'a',
+	tool: 'Dependabot',
+	severity: 'high',
+	id: 'GHSA-xxxx-xxxx-xxxx',
+	summary: 'x: a flaw',
+	url: 'https://github.com/versatiles-org/a/security/dependabot/1',
+	createdAt: '2026-10-01T00:00:00Z',
+};
+const security = () => Promise.resolve([alert]);
+
 describe('buildStatusSnapshot', () => {
 	it('records when the data was collected, the report and the repositories', async () => {
-		const snapshot = await buildStatusSnapshot(collected, repos, issues, options);
+		const snapshot = await buildStatusSnapshot(collected, repos, issues, security, options);
 		expect(snapshot.generatedAt).toBe('2026-11-01T12:00:00.000Z');
 		expect(snapshot.drift).toMatchObject({ status: 'ok', data: { totals: { usages: 2 } } });
 		expect(snapshot.repos).toEqual({ status: 'ok', data: [repo] });
 	});
 
 	it('passes the rank on to the update order', async () => {
-		const snapshot = await buildStatusSnapshot(collected, repos, issues, {
+		const snapshot = await buildStatusSnapshot(collected, repos, issues, security, {
 			...options,
 			rank: (name) => (name === 'b' ? 0 : 1),
 		});
@@ -66,6 +79,7 @@ describe('buildStatusSnapshot', () => {
 			() => Promise.reject(new Error('503 for https://registry.npmjs.org/x')),
 			repos,
 			issues,
+			security,
 			options,
 		);
 		expect(snapshot).toEqual({
@@ -74,11 +88,12 @@ describe('buildStatusSnapshot', () => {
 			drift: { status: 'failed', error: '503 for https://registry.npmjs.org/x' },
 			repos: { status: 'ok', data: [repo] },
 			issues: { status: 'ok', data: report },
+			security: { status: 'ok', data: [alert] },
 		});
 	});
 
 	it('records a failure of the repositories, and keeps the report', async () => {
-		const snapshot = await buildStatusSnapshot(collected, down, issues, options);
+		const snapshot = await buildStatusSnapshot(collected, down, issues, security, options);
 		expect(snapshot.repos).toEqual({ status: 'failed', error: '503' });
 		expect(snapshot.drift.status).toBe('ok');
 	});
@@ -89,13 +104,20 @@ describe('buildStatusSnapshot', () => {
 			handed.push(known);
 			return issues();
 		};
-		await buildStatusSnapshot(collected, repos, watch, options);
-		await buildStatusSnapshot(collected, down, watch, options);
+		await buildStatusSnapshot(collected, repos, watch, security, options);
+		await buildStatusSnapshot(collected, down, watch, security, options);
 		expect(handed).toEqual([[repo], null]);
 	});
 
+	it('records a failure of the security alerts, and keeps the rest', async () => {
+		const snapshot = await buildStatusSnapshot(collected, repos, issues, down, options);
+		expect(snapshot.security).toEqual({ status: 'failed', error: '503' });
+		expect(snapshot.issues.status).toBe('ok');
+		expect(snapshot.repos.status).toBe('ok');
+	});
+
 	it('records a failure of the issues, and keeps the rest', async () => {
-		const snapshot = await buildStatusSnapshot(collected, repos, down, options);
+		const snapshot = await buildStatusSnapshot(collected, repos, down, security, options);
 		expect(snapshot.issues).toEqual({ status: 'failed', error: '503' });
 		expect(snapshot.repos.status).toBe('ok');
 	});
@@ -103,15 +125,15 @@ describe('buildStatusSnapshot', () => {
 
 describe('readStatusSnapshot', () => {
 	it('reads back what was written, whether it succeeded or failed', async () => {
-		const written = await buildStatusSnapshot(collected, repos, issues, options);
+		const written = await buildStatusSnapshot(collected, repos, issues, security, options);
 		expect(readStatusSnapshot(renderStatusJson(written))).toEqual(written);
 
-		const failed = await buildStatusSnapshot(down, down, down, options);
+		const failed = await buildStatusSnapshot(down, down, down, down, options);
 		expect(readStatusSnapshot(renderStatusJson(failed))).toEqual(failed);
 	});
 
 	it('refuses a report from before a field was added', async () => {
-		const written = await buildStatusSnapshot(collected, repos, issues, options);
+		const written = await buildStatusSnapshot(collected, repos, issues, security, options);
 		if (written.drift.status !== 'ok') throw new Error('expected a report');
 		const older: Partial<typeof written.drift.data> = { ...written.drift.data };
 		delete older.pins;
@@ -124,6 +146,7 @@ describe('readStatusSnapshot', () => {
 			collected,
 			repos,
 			issues,
+			security,
 			options,
 		);
 		expect(_repos.status).toBe('ok');
@@ -131,12 +154,19 @@ describe('readStatusSnapshot', () => {
 	});
 
 	it('refuses a snapshot from before the issues were added, or with a field missing', async () => {
-		const written = await buildStatusSnapshot(collected, repos, issues, options);
+		const written = await buildStatusSnapshot(collected, repos, issues, security, options);
 		const { issues: _issues, ...older } = written;
 		expect(_issues.status).toBe('ok');
 		expect(readStatusSnapshot(JSON.stringify(older))).toBeNull();
 		const partial = { status: 'ok', data: { open: [], closed: [] } };
 		expect(readStatusSnapshot(JSON.stringify({ ...written, issues: partial }))).toBeNull();
+	});
+
+	it('refuses a snapshot from before the security alerts were added', async () => {
+		const written = await buildStatusSnapshot(collected, repos, issues, security, options);
+		const { security: _security, ...older } = written;
+		expect(_security.status).toBe('ok');
+		expect(readStatusSnapshot(JSON.stringify(older))).toBeNull();
 	});
 
 	it('refuses what is not a snapshot at all', () => {
@@ -157,7 +187,7 @@ describe('readStatusSnapshot', () => {
 
 describe('renderStatusJson', () => {
 	it('writes everything the snapshot holds, ending in a newline', async () => {
-		const snapshot = await buildStatusSnapshot(collected, repos, issues, options);
+		const snapshot = await buildStatusSnapshot(collected, repos, issues, security, options);
 		const json = renderStatusJson(snapshot);
 		expect(JSON.parse(json)).toEqual(snapshot);
 		expect(json.endsWith('}\n')).toBe(true);

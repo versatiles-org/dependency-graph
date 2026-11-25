@@ -22,6 +22,15 @@ export interface RepoStatus {
 	release: { tag: string; date: string } | null;
 	/** Commits on the default branch since the latest release, when that can be told. */
 	unreleased: number | null;
+	/** The findings Trivy is told to ignore, or null without a `.trivyignore` file. */
+	trivyIgnore: TrivyIgnore[] | null;
+}
+
+/** An accepted finding in `.trivyignore`, with the day Trivy reports it again. */
+export interface TrivyIgnore {
+	id: string;
+	/** `exp:YYYY-MM-DD` of the entry, or null if it never expires. */
+	expires: string | null;
 }
 
 export type GraphQl = <T>(query: string, variables?: Record<string, unknown>) => Promise<T>;
@@ -42,6 +51,7 @@ const STATUS_QUERY = `query ($org: String!, $after: String) {
           name
           target { ... on Commit { committedDate statusCheckRollup { state } } }
         }
+        trivyIgnore: object(expression: "HEAD:.trivyignore") { ... on Blob { text } }
       }
     }
   }
@@ -59,6 +69,8 @@ export interface ApiRepo {
 		name: string;
 		target: { committedDate?: string; statusCheckRollup?: { state: string } | null } | null;
 	} | null;
+	/** Absent in answers from before the field was asked for. */
+	trivyIgnore?: { text?: string | null } | null;
 }
 
 interface StatusPage {
@@ -86,6 +98,21 @@ export function ciState(state: string | null | undefined): CiState {
 	}
 }
 
+/**
+ * Reads Trivy's plain ignore format: one finding per line, optionally followed
+ * by `exp:YYYY-MM-DD`, and `#` starting a comment.
+ */
+export function parseTrivyIgnore(text: string): TrivyIgnore[] {
+	const entries: TrivyIgnore[] = [];
+	for (const line of text.split('\n')) {
+		const [id, ...options] = line.replace(/#.*/, '').trim().split(/\s+/);
+		if (!id) continue;
+		const expires = options.find((option) => /^exp:\d{4}-\d{2}-\d{2}$/.test(option));
+		entries.push({ id, expires: expires ? expires.slice(4) : null });
+	}
+	return entries;
+}
+
 export function parseRepo(repo: ApiRepo): RepoStatus {
 	const target = repo.defaultBranchRef?.target;
 	return {
@@ -100,6 +127,10 @@ export function parseRepo(repo: ApiRepo): RepoStatus {
 			? { tag: repo.latestRelease.tagName, date: repo.latestRelease.publishedAt ?? '' }
 			: null,
 		unreleased: null,
+		trivyIgnore:
+			typeof repo.trivyIgnore?.text === 'string'
+				? parseTrivyIgnore(repo.trivyIgnore.text)
+				: null,
 	};
 }
 

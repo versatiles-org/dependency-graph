@@ -123,6 +123,7 @@ describe('listRepos', () => {
 		lastCommit: null,
 		release: null,
 		unreleased: null,
+		trivyIgnore: null,
 	});
 	const repos = [
 		repo('c', 'passing'),

@@ -3,6 +3,7 @@ import {
 	ciState,
 	collectRepoStatus,
 	parseRepo,
+	parseTrivyIgnore,
 	unreleasedQuery,
 	type ApiRepo,
 	type GraphQl,
@@ -49,6 +50,7 @@ describe('parseRepo', () => {
 			lastCommit: '2026-10-28T00:00:00Z',
 			release: { tag: 'v1.0.0', date: '2026-10-01T00:00:00Z' },
 			unreleased: null,
+			trivyIgnore: null,
 		});
 	});
 
@@ -79,6 +81,32 @@ describe('parseRepo', () => {
 			defaultBranchRef: { name: 'main', target: { statusCheckRollup: null } },
 		});
 		expect(parseRepo(unchecked).ci).toBe('none');
+	});
+});
+
+describe('parseTrivyIgnore', () => {
+	it('reads the findings and their expiry dates, and skips comments and blank lines', () => {
+		const text = [
+			'# Findings accepted on purpose.',
+			'',
+			'CVE-2026-1 exp:2026-12-31',
+			'  GHSA-6v7p-g79w-8964   exp:2027-01-15  # inline comment',
+			'CVE-2026-2',
+			'CVE-2026-3 exp:soon',
+		].join('\n');
+		expect(parseTrivyIgnore(text)).toEqual([
+			{ id: 'CVE-2026-1', expires: '2026-12-31' },
+			{ id: 'GHSA-6v7p-g79w-8964', expires: '2027-01-15' },
+			{ id: 'CVE-2026-2', expires: null },
+			{ id: 'CVE-2026-3', expires: null },
+		]);
+	});
+
+	it('is read from the repository, and null without the file', () => {
+		const withFile = parseRepo(api('a', { trivyIgnore: { text: 'CVE-1 exp:2026-12-31\n' } }));
+		expect(withFile.trivyIgnore).toEqual([{ id: 'CVE-1', expires: '2026-12-31' }]);
+		expect(parseRepo(api('a', { trivyIgnore: null })).trivyIgnore).toBeNull();
+		expect(parseRepo(api('a')).trivyIgnore).toBeNull();
 	});
 });
 
