@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { data } from '../../../status.data';
 import type { PinFinding, Status } from '../../../scripts/dependency-graph/drift';
 import {
@@ -10,16 +10,16 @@ import {
 	filterDrift,
 	filterPins,
 	formatDate,
-	formatTime,
-	hoursAgo,
-	isStale,
 	listRepos,
 	pinLocation,
+	CI_STATE,
 	STATUS,
 	waitingOn,
 } from '../../../scripts/dependency-graph/status-view';
-import type { CiState } from '../../../scripts/dependency-graph/repo-status';
 import QueueGraph from './QueueGraph.vue';
+import SnapshotNote from './SnapshotNote.vue';
+import TabBar from './TabBar.vue';
+import type { Tab } from './tabs';
 
 const ORDER = Object.keys(STATUS) as Status[];
 
@@ -29,13 +29,6 @@ const PIN_STATUS: Record<PinFinding['status'], { mark: string; tone: Status }> =
 	unknown: { mark: '?', tone: 'unknown' },
 	ahead: { mark: '»', tone: 'ahead' },
 	current: { mark: '✓', tone: 'current' },
-};
-
-const CI_STATE: Record<CiState, { mark: string; label: string; tone: Status }> = {
-	failing: { mark: '✗', label: 'Failing', tone: 'range' },
-	running: { mark: '?', label: 'Running', tone: 'unknown' },
-	passing: { mark: '✓', label: 'Passing', tone: 'current' },
-	none: { mark: '', label: 'No checks', tone: 'ahead' },
 };
 
 const report = data?.drift.status === 'ok' ? data.drift.data : null;
@@ -48,11 +41,6 @@ const now = ref<Date | null>(null);
 onMounted(() => {
 	now.value = new Date();
 });
-
-const snapshotAge = computed(() =>
-	data && now.value ? hoursAgo(data.generatedAt, now.value) : null,
-);
-const stale = computed(() => Boolean(data && now.value && isStale(data.generatedAt, now.value)));
 
 const query = ref('');
 const hideTooling = ref(false);
@@ -76,18 +64,6 @@ const when = (date: string): string => (now.value ? daysAgo(date, now.value) : f
  * One tab for each part of the page. A tab's id is the id its section had, so
  * links to `#deployments` and the like still lead there.
  */
-type TabId =
-	'outdated-dependencies' | 'pinned-releases' | 'deployments' | 'repositories' | 'packages';
-interface Tab {
-	id: TabId;
-	label: string;
-	/** What is left to do there, or null when that is unknown. */
-	count: number | null;
-	/** What the count counts, read out after it. */
-	counted: string;
-	tone: Status;
-}
-
 const openCounts = computed(() =>
 	countOpen({
 		queue: filtered.value.queue,
@@ -147,41 +123,7 @@ const tabs = computed((): Tab[] => {
 	return list;
 });
 
-const selected = ref<TabId>(tabs.value[0].id);
-const isTab = (id: string): id is TabId => tabs.value.some((tab) => tab.id === id);
-/** The hash picks the tab, both on arrival and when a link on the page changes it. */
-const showHash = (): void => {
-	const id = decodeURIComponent(window.location.hash.slice(1));
-	if (isTab(id)) selected.value = id;
-};
-onMounted(() => {
-	showHash();
-	window.addEventListener('hashchange', showHash);
-});
-onBeforeUnmount(() => window.removeEventListener('hashchange', showHash));
-
-/** Replaced rather than pushed: a new entry would make VitePress reload the page on back. */
-function select(id: TabId): void {
-	selected.value = id;
-	history.replaceState(history.state, '', `#${id}`);
-}
-
-/** Arrow keys, Home and End move between tabs, as in the ARIA tabs pattern. */
-function onTabKey(event: KeyboardEvent): void {
-	const ids = tabs.value.map((tab) => tab.id);
-	const index = ids.indexOf(selected.value);
-	const moves: Record<string, number> = {
-		ArrowLeft: index - 1,
-		ArrowRight: index + 1,
-		Home: 0,
-		End: ids.length - 1,
-	};
-	if (!(event.key in moves)) return;
-	event.preventDefault();
-	const id = ids[(moves[event.key] + ids.length) % ids.length];
-	select(id);
-	document.getElementById(id)?.focus();
-}
+const selected = ref(tabs.value[0].id);
 
 /** What a pinned version or a running component needs, starting like the labels around it. */
 function stateText(row: { status: string; note: string; behind: string | null }): string {
@@ -216,15 +158,7 @@ const waiting = report ? waitingOn(report) : {};
 		</p>
 
 		<template v-else>
-			<p class="snapshot" :class="{ stale }">
-				Data from {{ formatTime(data.generatedAt) }}
-				<template v-if="snapshotAge">({{ snapshotAge }})</template
-				><template v-if="stale"
-					>. Updates should run at least every six hours, so they may have stopped.</template
-				><template v-else
-					>. Updated within ten minutes of a change, and at least every six hours.</template
-				>
-			</p>
+			<SnapshotNote :generated-at="data.generatedAt" />
 
 			<p v-if="driftError" class="notice failed">
 				The latest update could not check versions. The next one tries again.
@@ -275,30 +209,7 @@ const waiting = report ? waitingOn(report) : {};
 				</label>
 			</div>
 
-			<div class="tabs" role="tablist" aria-label="Parts of the status" @keydown="onTabKey">
-				<button
-					v-for="tab in tabs"
-					:id="tab.id"
-					:key="tab.id"
-					type="button"
-					role="tab"
-					class="tab"
-					:class="{ selected: selected === tab.id }"
-					:aria-selected="selected === tab.id"
-					:aria-controls="`${tab.id}-panel`"
-					:tabindex="selected === tab.id ? 0 : -1"
-					@click="select(tab.id)"
-				>
-					{{ tab.label }}
-					<span
-						v-if="tab.count !== null"
-						class="badge"
-						:class="tab.count > 0 ? `is-${tab.tone}` : 'is-zero'"
-						:title="`${tab.count} ${tab.counted}`"
-						>{{ tab.count }}<span class="visually-hidden"> {{ tab.counted }}</span></span
-					>
-				</button>
-			</div>
+			<TabBar v-model="selected" :tabs="tabs" label="Parts of the status" />
 
 			<template v-if="report">
 				<section
@@ -673,6 +584,7 @@ const waiting = report ? waitingOn(report) : {};
 </template>
 
 <style scoped src="./status-shared.css"></style>
+<style scoped src="./status-page.css"></style>
 
 <style scoped>
 /*
@@ -680,103 +592,6 @@ const waiting = report ? waitingOn(report) : {};
  * class of its own under a parent would raise its specificity and could change
  * which rule wins.
  */
-.status-page {
-	--st-range: var(--vp-c-danger-1);
-	--st-stale-lock: var(--vp-c-warning-1);
-	--st-unknown: var(--vp-c-purple-1);
-	--st-ahead: var(--vp-c-text-2);
-	--st-current: var(--vp-c-success-1);
-
-	/* One colour per lane of the graph; these differ in lightness as well as in hue. */
-	--st-lane-0: #6a2f9e;
-	--st-lane-1: #0b6fb8;
-	--st-lane-2: #c2570a;
-	--st-lane-3: #0f7a5f;
-	--st-lane-4: #a61e4d;
-	--st-lane-5: #4c5ab4;
-
-	box-sizing: border-box;
-	max-width: 1228px;
-	margin-inline: auto;
-	padding: 32px 24px 96px;
-	font-size: 14px;
-	line-height: 1.5;
-
-	.dark & {
-		--st-lane-0: #c49bf0;
-		--st-lane-1: #6db8f0;
-		--st-lane-2: #f0a060;
-		--st-lane-3: #5fd0ac;
-		--st-lane-4: #f08aa8;
-		--st-lane-5: #a3acf0;
-	}
-}
-
-h1 {
-	margin: 0 0 4px;
-	color: var(--vp-c-text-1);
-	font-size: 28px;
-	font-weight: 600;
-	line-height: 1.3;
-}
-
-.dim {
-	color: var(--vp-c-text-2);
-}
-
-.nowrap {
-	white-space: nowrap;
-}
-
-section {
-	margin-top: 16px;
-}
-
-.hint {
-	margin: 2px 0 12px;
-	color: var(--vp-c-text-2);
-}
-
-.heading {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: baseline;
-	justify-content: space-between;
-	gap: 4px 16px;
-}
-
-/* Snapshot and notices --------------------------------------------------- */
-
-.snapshot {
-	margin: 0;
-	color: var(--vp-c-text-2);
-
-	&.stale {
-		color: var(--vp-c-warning-1);
-		font-weight: 500;
-	}
-}
-
-.notice {
-	margin: 12px 0 0;
-	padding: 10px 14px;
-	border-left: 3px solid var(--vp-c-divider);
-	background: var(--vp-c-bg-soft);
-
-	&.failed {
-		border-left-color: var(--vp-c-danger-1);
-	}
-
-	code {
-		overflow-wrap: anywhere;
-	}
-}
-
-.empty {
-	margin: 8px 0 0;
-	color: var(--vp-c-text-2);
-}
-
 /* Summary: one tick for each place an organisation package is used --------- */
 
 .overview {
@@ -825,135 +640,6 @@ section {
 	a {
 		margin-left: 4px;
 	}
-}
-
-/* Filters ---------------------------------------------------------------- */
-
-.filters {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 8px 24px;
-	margin-top: 24px;
-}
-
-.search {
-	display: flex;
-	flex: 0 1 340px;
-	align-items: center;
-	gap: 8px;
-	color: var(--vp-c-text-2);
-
-	input {
-		flex: 1;
-		min-width: 0;
-		padding: 4px 10px;
-		border: 1px solid var(--vp-c-divider);
-		border-radius: 6px;
-		background: var(--vp-c-bg);
-		color: var(--vp-c-text-1);
-		font-size: 14px;
-	}
-}
-
-.toggle {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	color: var(--vp-c-text-2);
-	font-size: 13px;
-	cursor: pointer;
-
-	input {
-		accent-color: var(--vp-c-brand-1);
-	}
-}
-
-/* Tabs ------------------------------------------------------------------- */
-
-.tabs {
-	display: flex;
-	gap: 4px;
-	margin-top: 24px;
-	overflow-x: auto;
-	/*
-	 * A shadow rather than a border: the selected tab's line covers it without a
-	 * negative margin, which would make the row scroll vertically.
-	 */
-	box-shadow: inset 0 -1px var(--vp-c-divider);
-}
-
-.tab {
-	/*
-	 * Holds the visually hidden text of the badge, which VitePress positions
-	 * absolutely. Without this it would escape the scrolling row and widen the
-	 * whole page on a phone.
-	 */
-	position: relative;
-	display: inline-flex;
-	flex: none;
-	align-items: center;
-	gap: 8px;
-	padding: 8px 12px;
-	border-bottom: 2px solid transparent;
-	color: var(--vp-c-text-2);
-	font-weight: 500;
-	white-space: nowrap;
-	/* Clear of the fixed navigation bar when a link leads to a tab. */
-	scroll-margin-top: 80px;
-
-	&:hover {
-		color: var(--vp-c-text-1);
-	}
-
-	&.selected {
-		border-bottom-color: var(--vp-c-brand-1);
-		color: var(--vp-c-text-1);
-	}
-
-	/* The row scrolls, so an outline outside the tab would be cut off. */
-	&:focus-visible {
-		outline-offset: -2px;
-	}
-}
-
-.badge {
-	min-width: 20px;
-	padding: 0 6px;
-	border-radius: 10px;
-	background: color-mix(in srgb, var(--st-color) 16%, transparent);
-	color: var(--st-color);
-	font-size: 12px;
-	font-variant-numeric: tabular-nums;
-	font-weight: 600;
-	line-height: 18px;
-	text-align: center;
-
-	&.is-zero {
-		background: var(--vp-c-default-soft);
-		color: var(--vp-c-text-2);
-	}
-}
-
-/* Tables ----------------------------------------------------------------- */
-
-table {
-	width: 100%;
-	border-collapse: collapse;
-}
-
-th,
-td {
-	padding: 6px 12px 6px 0;
-	border-bottom: 1px solid var(--vp-c-divider);
-	text-align: left;
-	vertical-align: top;
-}
-
-thead th {
-	color: var(--vp-c-text-2);
-	font-size: 13px;
-	font-weight: 500;
 }
 
 /* The table scrolls sideways when narrow, so a name never has to break from its mark. */
@@ -1033,10 +719,6 @@ summary {
 }
 
 /* Repositories ------------------------------------------------------------ */
-
-.count {
-	font-variant-numeric: tabular-nums;
-}
 
 /* A line break between two elements in a template leaves no space between them. */
 .release-date {

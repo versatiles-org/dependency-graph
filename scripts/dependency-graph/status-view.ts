@@ -13,7 +13,7 @@ import type {
 	PinFinding,
 	Status,
 } from './drift';
-import type { RepoStatus } from './repo-status';
+import type { CiState, RepoStatus } from './repo-status';
 
 /** Every status has a mark as well, so colour never has to speak alone. */
 export const STATUS: Record<Status, { mark: string; label: string; one: string; many: string }> = {
@@ -37,6 +37,14 @@ export const STATUS: Record<Status, { mark: string; label: string; one: string; 
 		many: 'ahead of the latest release',
 	},
 	current: { mark: '✓', label: 'Up to date', one: 'up to date', many: 'up to date' },
+};
+
+/** A branch's checks, drawn in the tones of the statuses above. */
+export const CI_STATE: Record<CiState, { mark: string; label: string; tone: Status }> = {
+	failing: { mark: '✗', label: 'Failing', tone: 'range' },
+	running: { mark: '?', label: 'Running', tone: 'unknown' },
+	passing: { mark: '✓', label: 'Passing', tone: 'current' },
+	none: { mark: '', label: 'No checks', tone: 'ahead' },
 };
 
 /** A repository on GitHub, or a file on its default branch. */
