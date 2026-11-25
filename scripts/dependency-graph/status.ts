@@ -11,6 +11,7 @@
  */
 
 import { buildDriftReport, type DriftReport, type DriftResult } from './drift';
+import type { IssueReport } from './issues';
 import type { RepoStatus } from './repo-status';
 
 export type StatusSection<T> = { status: 'ok'; data: T } | { status: 'failed'; error: string };
@@ -22,6 +23,7 @@ export interface StatusSnapshot {
 	generatedAt: string;
 	drift: StatusSection<DriftReport>;
 	repos: StatusSection<RepoStatus[]>;
+	issues: StatusSection<IssueReport>;
 }
 
 async function section<T>(collect: () => Promise<T>): Promise<StatusSection<T>> {
@@ -35,11 +37,14 @@ async function section<T>(collect: () => Promise<T>): Promise<StatusSection<T>> 
 export async function buildStatusSnapshot(
 	collectDrift: () => Promise<DriftResult>,
 	collectRepos: () => Promise<RepoStatus[]>,
+	/** Is handed the repositories, or null if they failed, for their latest releases. */
+	collectIssues: (repos: RepoStatus[] | null) => Promise<IssueReport>,
 	{ org, now, rank }: { org: string; now: Date; rank?: (repo: string) => number },
 ): Promise<StatusSnapshot> {
 	const drift = await section(async () => buildDriftReport(await collectDrift(), rank));
 	const repos = await section(collectRepos);
-	return { org, generatedAt: now.toISOString(), drift, repos };
+	const issues = await section(() => collectIssues(repos.status === 'ok' ? repos.data : null));
+	return { org, generatedAt: now.toISOString(), drift, repos, issues };
 }
 
 /** Listed against the type, so that a new field cannot be forgotten here. */
@@ -51,6 +56,12 @@ const REPORT_FIELDS = {
 	publishes: true,
 	totals: true,
 } satisfies Record<keyof DriftReport, true>;
+
+const ISSUE_FIELDS = {
+	open: true,
+	closed: true,
+	unreleased: true,
+} satisfies Record<keyof IssueReport, true>;
 
 /**
  * A snapshot read back from disk, or null if this version of the code cannot use
@@ -64,14 +75,16 @@ export function readStatusSnapshot(text: string): StatusSnapshot | null {
 		return null;
 	}
 	if (typeof parsed !== 'object' || parsed === null) return null;
-	const { org, generatedAt, drift, repos } = parsed as Partial<
+	const { org, generatedAt, drift, repos, issues } = parsed as Partial<
 		Record<keyof StatusSnapshot, unknown>
 	>;
 	if (typeof org !== 'string' || typeof generatedAt !== 'string') return null;
 
-	const reportUsable = (data: object): boolean =>
-		Object.keys(REPORT_FIELDS).every((field) => field in data);
-	return sectionUsable(drift, reportUsable) && sectionUsable(repos, Array.isArray)
+	const hasFields = (fields: object) => (data: object) =>
+		Object.keys(fields).every((field) => field in data);
+	return sectionUsable(drift, hasFields(REPORT_FIELDS)) &&
+		sectionUsable(repos, Array.isArray) &&
+		sectionUsable(issues, hasFields(ISSUE_FIELDS))
 		? (parsed as StatusSnapshot)
 		: null;
 }

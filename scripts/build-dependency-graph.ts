@@ -38,7 +38,8 @@ import {
 import { Progress } from './dependency-graph/progress';
 import { renderJson, renderPage } from './dependency-graph/render';
 import { sortEdges, type Graph, type RepoNode } from './dependency-graph/model';
-import { collectRepoStatus } from './dependency-graph/repo-status';
+import { collectIssues } from './dependency-graph/issues';
+import { collectRepoStatus, type GraphQl } from './dependency-graph/repo-status';
 import { buildStatusSnapshot, renderStatusJson } from './dependency-graph/status';
 
 const ROOT = resolve(__dirname, '..');
@@ -277,19 +278,19 @@ async function main(): Promise<void> {
 		return;
 	}
 
-	const collectRepos = () =>
-		collectRepoStatus(
-			(query, variables) => github.graphql(query, variables),
-			config.org,
-			new Set(repos.map((repo) => repo.name)),
-		);
-	const snapshot = await buildStatusSnapshot(collectVersions, collectRepos, {
-		org: config.org,
-		now: new Date(),
-		rank,
-	});
+	const query: GraphQl = (text, variables) => github.graphql(text, variables);
+	const now = new Date();
+	const snapshot = await buildStatusSnapshot(
+		collectVersions,
+		() => collectRepoStatus(query, config.org, names),
+		(known) => collectIssues(query, config.org, names, { now, repos: known }),
+		{ org: config.org, now, rank },
+	);
 	if (snapshot.repos.status === 'failed') {
 		console.warn(`[dependency-graph] status: repositories not checked: ${snapshot.repos.error}`);
+	}
+	if (snapshot.issues.status === 'failed') {
+		console.warn(`[dependency-graph] status: issues not checked: ${snapshot.issues.error}`);
 	}
 	writeFileSync(resolve(ROOT, TARGET_STATUS), renderStatusJson(snapshot));
 	if (snapshot.drift.status === 'failed') {
