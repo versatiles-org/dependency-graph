@@ -292,6 +292,13 @@ function isItem<T extends { __typename: string }>(node: ApiNode<T>): node is T {
 	return node?.__typename === 'Issue' || node?.__typename === 'PullRequest';
 }
 
+/** Past the limit, search drops results without saying which. */
+function checkLimit(issueCount: number, q: string): void {
+	if (issueCount > SEARCH_LIMIT) {
+		throw new Error(`search found ${issueCount} results, more than it can list: ${q}`);
+	}
+}
+
 /** Every result of one search, in the order GitHub gives them. */
 async function searchAll<T extends { __typename: string }>(
 	query: GraphQl,
@@ -303,14 +310,49 @@ async function searchAll<T extends { __typename: string }>(
 	for (;;) {
 		const page: SearchPage<T> = await query<SearchPage<T>>(text, { q, after });
 		const { issueCount, nodes, pageInfo } = page.search;
-		// Past the limit, search drops results without saying which.
-		if (issueCount > SEARCH_LIMIT) {
-			throw new Error(`search found ${issueCount} results, more than it can list: ${q}`);
-		}
+		checkLimit(issueCount, q);
 		found.push(...nodes.filter(isItem));
 		if (!pageInfo.hasNextPage) return found;
 		after = pageInfo.endCursor;
 	}
+}
+
+/** Many searches for closed items in one query, each under an alias of its place in the list. */
+export function closedBatchQuery(searches: string[]): string {
+	const lines = searches.map(
+		(q, index) =>
+			`  r${index}: search(query: ${JSON.stringify(q)}, type: ISSUE, first: 100) {\n` +
+			`    issueCount\n    pageInfo { hasNextPage endCursor }\n    nodes { ${CLOSED_FIELDS} }\n  }`,
+	);
+	return `query {\n${lines.join('\n')}\n}`;
+}
+
+/**
+ * The results of many searches for closed items, in one request however many
+ * there are. A search with more than one page of results, which is rare, is
+ * asked again on its own and followed through its pages.
+ */
+async function searchClosedMany(
+	query: GraphQl,
+	searches: string[],
+): Promise<(ApiClosedIssue | ApiClosedPull)[][]> {
+	if (searches.length === 0) return [];
+	type Item = ApiClosedIssue | ApiClosedPull;
+	const answers = await query<Record<string, SearchPage<Item>['search'] | undefined>>(
+		closedBatchQuery(searches),
+	);
+	const results: Item[][] = [];
+	for (const [index, q] of searches.entries()) {
+		const answer = answers[`r${index}`];
+		if (!answer) throw new Error(`search got no answer: ${q}`);
+		checkLimit(answer.issueCount, q);
+		results.push(
+			answer.pageInfo.hasNextPage
+				? await searchAll<Item>(query, CLOSED_QUERY, q)
+				: answer.nodes.filter(isItem),
+		);
+	}
+	return results;
 }
 
 /** When the repository's latest release was published, if commits have followed it. */
@@ -342,17 +384,15 @@ export async function collectIssues(
 
 	let unreleased: ClosedItem[] | null = null;
 	if (repos) {
-		unreleased = [];
-		for (const repo of repos) {
+		const searches = repos.flatMap((repo) => {
 			const since = releasedSince(repo);
-			if (!since || !names.has(repo.name)) continue;
-			const fixed = await searchAll<ApiClosedIssue | ApiClosedPull>(
-				query,
-				CLOSED_QUERY,
+			if (!since || !names.has(repo.name)) return [];
+			return [
 				`repo:${org}/${repo.name} is:issue is:closed reason:completed closed:>${since} sort:updated-desc`,
-			);
-			unreleased.push(...fixed.map(parseClosed));
-		}
+			];
+		});
+		const fixed = await searchClosedMany(query, searches);
+		unreleased = fixed.flat().map(parseClosed);
 	}
 
 	return {

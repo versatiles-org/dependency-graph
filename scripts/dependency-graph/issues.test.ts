@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	actorOf,
+	closedBatchQuery,
 	collectIssues,
 	parseClosed,
 	parseOpen,
@@ -214,26 +215,43 @@ describe('collectIssues', () => {
 		...overrides,
 	});
 
-	/** Answers each search from the pages given for it, and records what was asked. */
+	/**
+	 * Answers each search from the pages given for it, and records what was asked
+	 * and how many requests it took. A batch of searches, each under an alias,
+	 * gets the first page of each.
+	 */
 	const fake = (answers: Record<string, { nodes: unknown[]; count?: number }[]>) => {
 		const asked: string[] = [];
-		const query = ((_text: string, variables?: Record<string, unknown>) => {
-			const q = String(variables?.q);
-			asked.push(q);
+		let requests = 0;
+		const page = (q: string, index: number) => {
 			const key = Object.keys(answers).find((part) => q.includes(part));
 			const pages = key ? answers[key] : [{ nodes: [] }];
-			const index = variables?.after ? Number(variables.after) : 0;
 			const { nodes, count } = pages[index];
 			const hasNextPage = index + 1 < pages.length;
-			return Promise.resolve({
-				search: {
-					issueCount: count ?? nodes.length,
-					pageInfo: { hasNextPage, endCursor: hasNextPage ? String(index + 1) : null },
-					nodes,
-				},
-			});
+			return {
+				issueCount: count ?? nodes.length,
+				pageInfo: { hasNextPage, endCursor: hasNextPage ? String(index + 1) : null },
+				nodes,
+			};
+		};
+		const query = ((text: string, variables?: Record<string, unknown>) => {
+			requests += 1;
+			if (!variables) {
+				const batch: Record<string, unknown> = {};
+				for (const [, alias, quoted] of text.matchAll(
+					/(r\d+): search\(query: ("(?:[^"\\]|\\.)*")/g,
+				)) {
+					const q = JSON.parse(quoted) as string;
+					asked.push(q);
+					batch[alias] = page(q, 0);
+				}
+				return Promise.resolve(batch);
+			}
+			const q = String(variables.q);
+			asked.push(q);
+			return Promise.resolve({ search: page(q, variables.after ? Number(variables.after) : 0) });
 		}) as GraphQl;
-		return { query, asked };
+		return { query, asked, requests: () => requests };
 	};
 
 	it('keeps the covered repositories, follows the pages and skips what is not an item', async () => {
@@ -289,10 +307,57 @@ describe('collectIssues', () => {
 		]);
 	});
 
+	it('asks for the fixes of every repository in one request', async () => {
+		const { query, requests } = fake({
+			'repo:org/a ': [{ nodes: [closedIssue('Commit')] }],
+			'repo:org/b ': [
+				{ nodes: [closedIssue('PullRequest', { number: 5, repository: { name: 'b' } })] },
+			],
+		});
+		const report = await collectIssues(query, 'org', new Set(['a', 'b']), {
+			now,
+			repos: [repo('a'), repo('b')],
+		});
+		// Open, closed this week, and one for all the fixes.
+		expect(requests()).toBe(3);
+		expect(report.unreleased?.map((fix) => [fix.repo, fix.number, fix.how])).toEqual([
+			['a', 3, 'commit'],
+			['b', 5, 'pull'],
+		]);
+	});
+
+	it('follows the pages of a repository with more fixes than one answer holds', async () => {
+		const { query, requests } = fake({
+			'repo:org/a ': [
+				{ nodes: [closedIssue('Commit', { number: 1 })] },
+				{ nodes: [closedIssue('Commit', { number: 2 })] },
+			],
+		});
+		const report = await collectIssues(query, 'org', new Set(['a']), { now, repos: [repo('a')] });
+		expect(report.unreleased?.map((fix) => fix.number)).toEqual([1, 2]);
+		// The batch, then both pages of that one search again.
+		expect(requests()).toBe(5);
+	});
+
+	it('fails rather than list fixes that GitHub cuts short', async () => {
+		const { query } = fake({ 'repo:org/a ': [{ nodes: [], count: 1001 }] });
+		await expect(
+			collectIssues(query, 'org', new Set(['a']), { now, repos: [repo('a')] }),
+		).rejects.toThrow('more than it can list');
+	});
+
 	it('fails rather than list a search that GitHub cuts short', async () => {
 		const { query } = fake({ 'is:open': [{ nodes: [], count: 1001 }] });
 		await expect(collectIssues(query, 'org', new Set(), { now, repos: null })).rejects.toThrow(
 			'more than it can list',
 		);
+	});
+});
+
+describe('closedBatchQuery', () => {
+	it('puts each search under an alias, with its text quoted', () => {
+		const text = closedBatchQuery(['repo:org/a is:closed', 'say "hi"']);
+		expect(text).toContain('r0: search(query: "repo:org/a is:closed", type: ISSUE, first: 100)');
+		expect(text).toContain('r1: search(query: "say \\"hi\\"", type: ISSUE, first: 100)');
 	});
 });
