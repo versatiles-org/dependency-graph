@@ -6,7 +6,7 @@ The site is published at <https://versatiles.org/dependency-graph/>. The full re
 
 The status page is for people working on VersaTiles, in the private area of [status.versatiles.org](https://status.versatiles.org/private/dependency-status/). It shows which repositories use an outdated release of the project's own packages, in the order to update them, whether exact releases pinned in formulas, manifests, image tags and release bundles have fallen behind, whether deployments run the latest releases, and for each repository what is open, whether its checks pass and what is waiting to be released. Its old address, versatiles.org/dependency-graph/status/, forwards there.
 
-Next to it, at [`/private/dependency-status/issues/`](https://status.versatiles.org/private/dependency-status/issues/), a second page covers the open issues and pull requests of all repositories: who outside is waiting for an answer, which pull requests are stuck, which issues block others (from GitHub's "blocked by" links and sub-issues), which fixes are closed but not released, and the backlog of each repository.
+Next to it, at [`/private/dependency-status/issues/`](https://status.versatiles.org/private/dependency-status/issues/), a second page covers the open issues and pull requests of all repositories: what to do next, in one ranked list, who outside is waiting for an answer, which pull requests are stuck, which issues block others (from GitHub's "blocked by" links and sub-issues), which fixes are closed but not released, every open issue by repository, the core first, and the backlog of each repository.
 
 ## How it updates
 

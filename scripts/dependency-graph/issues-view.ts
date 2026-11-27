@@ -9,6 +9,7 @@
  */
 
 import type { ClosedItem, IssueRef, OpenItem } from './issues';
+import type { RepoImportance } from './model';
 import type { RepoStatus } from './repo-status';
 
 const DAY = 24 * 3_600_000;
@@ -312,6 +313,264 @@ export function unreleasedByRepo(fixes: ClosedItem[], repos: RepoStatus[]): Unre
 		(a, b) =>
 			a.fixes[0].closedAt.localeCompare(b.fixes[0].closedAt) || a.repo.localeCompare(b.repo),
 	);
+}
+
+// Open issues -----------------------------------------------------------------
+
+export interface IssueRow {
+	item: OpenItem;
+	/** How many open issues wait for this one. */
+	blocks: number;
+	/** How many open issues this one waits for. */
+	waitsFor: number;
+	/** How many open sub-issues it has. */
+	subIssues: number;
+	/** Touched within the last `WAIT_DAYS`. */
+	active: boolean;
+	/** Untouched for longer than `STALE_ISSUE_DAYS`. */
+	stale: boolean;
+}
+
+export interface IssueGroup {
+	repo: string;
+	/** Null for a repository the dependency graph doesn't know. */
+	category: string | null;
+	usedBy: number;
+	issues: IssueRow[];
+}
+
+/**
+ * Every open issue, by repository, in the order of `importance`; repositories
+ * it doesn't know follow by name. In each repository the issues that block
+ * others come first, the most blocking first, then the most recently touched.
+ */
+export function openIssues(
+	org: string,
+	open: OpenItem[],
+	importance: RepoImportance[],
+	now: Date,
+): IssueGroup[] {
+	const issues = open.filter((item) => item.kind === 'issue');
+	const keyOf = (item: OpenItem) => `${org}/${item.repo}#${item.number}`;
+	const blocks = new Map<string, number>();
+	const subIssues = new Map<string, number>();
+	const add = (counts: Map<string, number>, key: string) =>
+		counts.set(key, (counts.get(key) ?? 0) + 1);
+	for (const item of issues) {
+		for (const blocker of item.blockedBy) if (blocker.open) add(blocks, refText(blocker));
+		if (item.parent) add(subIssues, refText(item.parent));
+	}
+
+	const known = new Map(importance.map((repo, index) => [repo.name, { repo, index }]));
+	const groups = new Map<string, IssueGroup>();
+	for (const item of issues) {
+		const info = known.get(item.repo)?.repo;
+		const group = groups.get(item.repo) ?? {
+			repo: item.repo,
+			category: info?.category ?? null,
+			usedBy: info?.usedBy ?? 0,
+			issues: [],
+		};
+		group.issues.push({
+			item,
+			blocks: blocks.get(keyOf(item)) ?? 0,
+			waitsFor: item.blockedBy.filter((blocker) => blocker.open).length,
+			subIssues: subIssues.get(keyOf(item)) ?? 0,
+			active: !olderThan(item.updatedAt, WAIT_DAYS, now),
+			stale: olderThan(item.updatedAt, STALE_ISSUE_DAYS, now),
+		});
+		groups.set(item.repo, group);
+	}
+
+	const place = (repo: string) => known.get(repo)?.index ?? importance.length;
+	for (const group of groups.values()) {
+		group.issues.sort(
+			(a, b) => b.blocks - a.blocks || b.item.updatedAt.localeCompare(a.item.updatedAt),
+		);
+	}
+	return [...groups.values()].sort(
+		(a, b) => place(a.repo) - place(b.repo) || a.repo.localeCompare(b.repo),
+	);
+}
+
+// Next up ---------------------------------------------------------------------
+
+/** How soon a step wants doing. */
+export type Urgency = 'now' | 'soon' | 'later';
+
+export interface NextStep {
+	urgency: Urgency;
+	/** Why it is a step, in a few words. */
+	reason: string;
+	/** Where it is: one repository, or each one an update reaches. */
+	repos: string[];
+	title: string;
+	url: string;
+	number: number | null;
+	/** Since when it has waited, where that matters. */
+	since: string | null;
+	/** The tab with the details. */
+	tab: 'waiting' | 'pull-requests' | 'blocking' | 'unreleased';
+}
+
+const plural = (count: number, one: string, many: string): string =>
+	`${count} ${count === 1 ? one : many}`;
+
+/** Every issue below a blocker in its tree, each once. */
+function blockedBelow(node: BlockNode, seen = new Set<string>()): Set<string> {
+	for (const child of node.blocks) {
+		seen.add(refText(child.ref));
+		blockedBelow(child, seen);
+	}
+	return seen;
+}
+
+/**
+ * What to do next, from what the other tabs list, in this order:
+ *
+ * - now: someone outside waited longer than `WAIT_DAYS`, or a pull request
+ *   from people is stuck;
+ * - soon: someone outside waits, a pull request from outside waits for a
+ *   review, or an open issue blocks others, the most blocking first;
+ * - later: fixes have waited longer than `WAIT_DAYS` for a release, bots'
+ *   updates fail or are ready to merge, or links to closed blockers can go.
+ *
+ * Within each kind the order of its tab holds.
+ */
+export function nextSteps(
+	org: string,
+	lists: {
+		waiting: Waiting[];
+		pulls: PullRow[];
+		bots: BotGroup[];
+		blocks: Blocking;
+		unreleased: UnreleasedRepo[] | null;
+	},
+	now: Date,
+): NextStep[] {
+	const { waiting, pulls, bots, blocks, unreleased } = lists;
+	const ofItem = (item: OpenItem) => ({
+		repos: [item.repo],
+		title: item.title,
+		url: item.url,
+		number: item.number,
+	});
+	const answer = (entry: Waiting, urgency: Urgency): NextStep => ({
+		urgency,
+		reason: entry.unanswered ? 'No reply yet' : 'Waits for an answer',
+		...ofItem(entry.item),
+		since: entry.since,
+		tab: 'waiting',
+	});
+
+	const stuck = pulls
+		.filter((row) => row.problems.length > 0)
+		.map((row): NextStep => ({
+			urgency: 'now',
+			reason: row.problems.map((problem) => PROBLEMS[problem]).join(', '),
+			...ofItem(row.item),
+			since: row.item.updatedAt,
+			tab: 'pull-requests',
+		}));
+	const reviews = pulls
+		.filter((row) => row.problems.length === 0 && row.needsReview)
+		.map((row): NextStep => ({
+			urgency: 'soon',
+			reason: 'Waits for a review',
+			...ofItem(row.item),
+			since: row.item.createdAt,
+			tab: 'pull-requests',
+		}));
+
+	// A blocker outside the snapshot is closed or elsewhere, so nothing to do here.
+	const blockers = blocks.trees
+		.flatMap((tree) => (tree.item ? [{ item: tree.item, count: blockedBelow(tree).size }] : []))
+		.sort((a, b) => b.count - a.count)
+		.map(({ item, count }): NextStep => ({
+			urgency: 'soon',
+			reason: `Blocks ${plural(count, 'issue', 'issues')}`,
+			...ofItem(item),
+			since: null,
+			tab: 'blocking',
+		}));
+
+	const releases = (unreleased ?? [])
+		.filter((repo) => olderThan(repo.fixes[0].closedAt, WAIT_DAYS, now))
+		.map((repo): NextStep => ({
+			urgency: 'later',
+			reason: 'Fixed, not released',
+			repos: [repo.repo],
+			title: `${plural(repo.fixes.length, 'fix', 'fixes')} since ${repo.release.tag}`,
+			url: `https://github.com/${org}/${repo.repo}/compare/${repo.release.tag}...${repo.branch}`,
+			number: null,
+			since: repo.fixes[0].closedAt,
+			tab: 'unreleased',
+		}));
+
+	const update = (group: BotGroup, reason: string): NextStep => ({
+		urgency: 'later',
+		reason,
+		repos: group.pulls.map((entry) => entry.repo),
+		title: `Update ${group.name}`,
+		url: group.pulls[0].url,
+		number: group.pulls.length === 1 ? group.pulls[0].number : null,
+		since: null,
+		tab: 'pull-requests',
+	});
+	const broken = (group: BotGroup) => group.pulls.some((entry) => entry.problems.length > 0);
+	const ready = (group: BotGroup) =>
+		group.pulls.every((entry) => entry.problems.length === 0 && entry.pull?.ci === 'passing');
+	const failingUpdates = bots
+		.filter(broken)
+		.map((group) =>
+			update(
+				group,
+				[
+					...new Set(
+						group.pulls.flatMap((entry) =>
+							entry.problems.map((problem) => PROBLEMS[problem]),
+						),
+					),
+				].join(', '),
+			),
+		);
+	const readyUpdates = bots.filter(ready).map((group) => update(group, 'Ready to merge'));
+
+	const cleanup: NextStep[] =
+		blocks.resolved.length === 0
+			? []
+			: [
+					{
+						urgency: 'later',
+						reason: 'Links to clean up',
+						repos: [...new Set(blocks.resolved.map((entry) => entry.item.repo))],
+						title: `${plural(blocks.resolved.length, 'issue waits', 'issues wait')} only for closed issues`,
+						url: blocks.resolved[0].item.url,
+						number: null,
+						since: null,
+						tab: 'blocking',
+					},
+				];
+
+	// A pull request from outside nobody answered also waits for a review: it is listed once, where it ranks highest.
+	const seen = new Set<string>();
+	return [
+		...waiting.filter((entry) => entry.overdue).map((entry) => answer(entry, 'now')),
+		...stuck,
+		...waiting.filter((entry) => !entry.overdue).map((entry) => answer(entry, 'soon')),
+		...reviews,
+		...blockers,
+		...releases,
+		...failingUpdates,
+		...readyUpdates,
+		...cleanup,
+	].filter((step) => {
+		if (step.number === null) return true;
+		const key = `${step.repos[0]}#${step.number}`;
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
 }
 
 // Backlog ---------------------------------------------------------------------

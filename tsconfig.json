@@ -17,6 +17,7 @@
 		"vitest.config.ts",
 		"dependency_graph.data.ts",
 		"status.data.ts",
+		"repo_importance.data.ts",
 		".vitepress/**/*.ts",
 		".vitepress/**/*.mts",
 		".vitepress/**/*.d.ts",

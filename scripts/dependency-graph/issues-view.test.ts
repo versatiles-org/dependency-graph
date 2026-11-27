@@ -8,6 +8,8 @@ import {
 	dayBefore,
 	humanPulls,
 	matches,
+	nextSteps,
+	openIssues,
 	searchUrl,
 	shortRef,
 	unreleasedByRepo,
@@ -330,6 +332,193 @@ describe('unreleasedByRepo', () => {
 			['b', 4, [1, 2]],
 			['a', 4, [3]],
 		]);
+	});
+});
+
+describe('openIssues', () => {
+	const importance = [
+		{ name: 'core', category: 'Core', usedBy: 5 },
+		{ name: 'tool', category: 'Tools', usedBy: 0 },
+	];
+
+	it('groups by repository in order of importance, unknown repositories last by name', () => {
+		const groups = openIssues(
+			'org',
+			[
+				item({ repo: 'zeta', number: 1 }),
+				item({ repo: 'tool', number: 2 }),
+				item({ repo: 'alpha', number: 3 }),
+				item({ repo: 'core', number: 4 }),
+				pull({ repo: 'core', number: 5 }),
+			],
+			importance,
+			now,
+		);
+		expect(groups.map((group) => [group.repo, group.category, group.usedBy])).toEqual([
+			['core', 'Core', 5],
+			['tool', 'Tools', 0],
+			['alpha', null, 0],
+			['zeta', null, 0],
+		]);
+		// Pull requests have a tab of their own.
+		expect(groups[0].issues.map((row) => row.item.number)).toEqual([4]);
+	});
+
+	it('puts blockers first, then the most recently touched, and counts links and sub-issues', () => {
+		const [group] = openIssues(
+			'org',
+			[
+				item({ number: 1, updatedAt: '2026-11-24T00:00:00Z' }),
+				item({ number: 2, updatedAt: '2025-01-01T00:00:00Z' }),
+				item({
+					number: 3,
+					updatedAt: '2026-11-10T00:00:00Z',
+					blockedBy: [
+						{ repo: 'org/a', number: 2, open: true },
+						{ repo: 'org/a', number: 9, open: false },
+					],
+				}),
+				item({
+					number: 4,
+					updatedAt: '2026-11-01T00:00:00Z',
+					parent: { repo: 'org/a', number: 1 },
+				}),
+			],
+			importance,
+			now,
+		);
+		expect(
+			group.issues.map((row) => [
+				row.item.number,
+				row.blocks,
+				row.waitsFor,
+				row.subIssues,
+				row.active,
+				row.stale,
+			]),
+		).toEqual([
+			[2, 1, 0, 0, false, true],
+			[1, 0, 0, 1, true, false],
+			[3, 0, 1, 0, false, false],
+			[4, 0, 0, 0, false, false],
+		]);
+	});
+});
+
+describe('nextSteps', () => {
+	const release = { tag: 'v1.0.0', date: '2026-10-01T00:00:00Z' };
+	const status = (name: string): RepoStatus => ({
+		name,
+		branch: 'main',
+		issues: 0,
+		pulls: 0,
+		botPulls: 0,
+		ci: 'passing',
+		lastCommit: null,
+		release,
+		unreleased: 3,
+		trivyIgnore: null,
+	});
+
+	const steps = (open: OpenItem[], fixes: ClosedItem[] = []) =>
+		nextSteps(
+			'org',
+			{
+				waiting: waitingOnUs(open, now),
+				pulls: humanPulls(open, now),
+				bots: botGroups(open),
+				blocks: blocking('org', open),
+				unreleased: unreleasedByRepo(fixes, [status('a'), status('b')]),
+			},
+			now,
+		);
+
+	it('ranks what is late before what waits, and chores last', () => {
+		const bot = { actor: 'bot' as const, author: 'dependabot' };
+		const result = steps(
+			[
+				// Waits for an answer, one week and a day ago: overdue.
+				item({ number: 1, createdAt: '2026-11-17T00:00:00Z', title: 'Old question' }),
+				// Waits for an answer, but only since yesterday.
+				item({ number: 2, createdAt: '2026-11-24T00:00:00Z', title: 'New question' }),
+				// Our own pull request, with conflicts.
+				pull({ number: 3, actor: 'maintainer', title: 'Mine' }, { conflicts: true }),
+				// Someone else's, answered, but waiting for review.
+				pull(
+					{
+						number: 4,
+						title: 'Theirs',
+						lastReply: { login: 'me', actor: 'maintainer', at: '2026-11-20T00:00:00Z' },
+					},
+					{ review: 'required' },
+				),
+				// Blocks one issue, which blocks another.
+				item({ number: 5, actor: 'maintainer', title: 'Root' }),
+				item({
+					number: 6,
+					actor: 'maintainer',
+					blockedBy: [{ repo: 'org/a', number: 5, open: true }],
+				}),
+				item({
+					number: 7,
+					actor: 'maintainer',
+					blockedBy: [
+						{ repo: 'org/a', number: 6, open: true },
+						{ repo: 'org/a', number: 70, open: false },
+					],
+				}),
+				// Only waits for a closed issue.
+				item({
+					number: 8,
+					actor: 'maintainer',
+					blockedBy: [{ repo: 'org/a', number: 80, open: false }],
+				}),
+				pull({ number: 9, ...bot, title: 'Bump vite from 1 to 2' }, { ci: 'failing' }),
+				pull({ number: 10, ...bot, repo: 'b', title: 'Bump vite from 1 to 2' }),
+				pull({ number: 11, ...bot, title: 'Bump zod from 1 to 2' }),
+				pull({ number: 12, ...bot, title: 'Bump tsx from 1 to 2' }, { ci: 'running' }),
+			],
+			[
+				closed({ repo: 'a', number: 20, closedAt: '2026-11-10T00:00:00Z' }),
+				closed({ repo: 'a', number: 21, closedAt: '2026-11-20T00:00:00Z' }),
+				// Fixed only yesterday: a release can wait.
+				closed({ repo: 'b', number: 22, closedAt: '2026-11-24T00:00:00Z' }),
+			],
+		);
+		expect(result.map((step) => [step.urgency, step.reason, step.repos, step.title])).toEqual([
+			['now', 'No reply yet', ['a'], 'Old question'],
+			['now', 'Conflicts', ['a'], 'Mine'],
+			['soon', 'No reply yet', ['a'], 'New question'],
+			['soon', 'Waits for a review', ['a'], 'Theirs'],
+			['soon', 'Blocks 2 issues', ['a'], 'Root'],
+			['later', 'Fixed, not released', ['a'], '2 fixes since v1.0.0'],
+			['later', 'CI failing', ['a', 'b'], 'Update vite'],
+			['later', 'Ready to merge', ['a'], 'Update zod'],
+			['later', 'Links to clean up', ['a'], '1 issue waits only for closed issues'],
+		]);
+		expect(result[5]).toMatchObject({
+			url: 'https://github.com/org/a/compare/v1.0.0...main',
+			since: '2026-11-10T00:00:00Z',
+			tab: 'unreleased',
+		});
+		expect(result[6]).toMatchObject({ url: 'https://github.com/org/a/issues/1', number: null });
+		expect(result[7]).toMatchObject({ number: 11 });
+	});
+
+	it('lists an unanswered pull request from outside once, where it ranks highest', () => {
+		const result = steps([pull({ number: 4 }, { review: 'required' })]);
+		expect(result.map((step) => [step.urgency, step.reason])).toEqual([['now', 'No reply yet']]);
+	});
+
+	it('leaves out blockers the snapshot does not have', () => {
+		const result = steps([
+			item({
+				number: 1,
+				actor: 'maintainer',
+				blockedBy: [{ repo: 'elsewhere/x', number: 1, open: true }],
+			}),
+		]);
+		expect(result).toEqual([]);
 	});
 });
 

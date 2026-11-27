@@ -190,3 +190,38 @@ export function sortEdges(edges: Edge[]): Edge[] {
 			a.line - b.line,
 	);
 }
+
+/** A repository's place in how much it matters to someone using VersaTiles. */
+export interface RepoImportance {
+	name: string;
+	/** The title of its primary category. */
+	category: string;
+	/** How many repositories depend on it directly. */
+	usedBy: number;
+}
+
+/**
+ * The repositories in order of how much they matter: by primary category in the
+ * order the configuration lists them, from the core to the internal helpers,
+ * then by how many repositories depend on them, then by name.
+ */
+export function repoImportance(graph: Graph): RepoImportance[] {
+	const usedBy = new Map<string, number>();
+	for (const link of dependencyLinks(graph.edges)) {
+		usedBy.set(link.to, (usedBy.get(link.to) ?? 0) + 1);
+	}
+	const tagIndex = new Map(graph.tags.map((tag, index) => [tag.id, index]));
+	const place = (repo: RepoNode): number => tagIndex.get(repo.tags[0]) ?? graph.tags.length;
+	return [...graph.repos]
+		.sort(
+			(a, b) =>
+				place(a) - place(b) ||
+				(usedBy.get(b.name) ?? 0) - (usedBy.get(a.name) ?? 0) ||
+				a.name.localeCompare(b.name),
+		)
+		.map((repo) => ({
+			name: repo.name,
+			category: graph.tags.find((tag) => tag.id === repo.tags[0])?.title ?? repo.tags[0] ?? '',
+			usedBy: usedBy.get(repo.name) ?? 0,
+		}));
+}

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { data as importance } from '../../../repo_importance.data';
 import { data } from '../../../status.data';
 import type { ClosedItem, OpenItem } from '../../../scripts/dependency-graph/issues';
 import {
@@ -10,6 +11,8 @@ import {
 	dayBefore,
 	humanPulls,
 	matches,
+	nextSteps,
+	openIssues,
 	PROBLEMS,
 	refUrl,
 	searchUrl,
@@ -20,6 +23,7 @@ import {
 	WAIT_DAYS,
 	waitingOnUs,
 	type BlockNode,
+	type Urgency,
 } from '../../../scripts/dependency-graph/issues-view';
 import {
 	CI_STATE,
@@ -61,10 +65,18 @@ const unreleased = report?.unreleased
 	? unreleasedByRepo(report.unreleased, repoStatus ?? [])
 	: null;
 const unreleasedCount = unreleased?.reduce((sum, repo) => sum + repo.fixes.length, 0) ?? null;
+const steps = nextSteps(org, { waiting, pulls, bots, blocks, unreleased }, asOf);
+const issueGroups = openIssues(org, open, importance, asOf);
 const backlogRows = backlog(open, report?.closed ?? [], asOf);
 const weekAgo = dayBefore(asOf, WAIT_DAYS);
 const staleBefore = dayBefore(asOf, STALE_ISSUE_DAYS);
 
+/** A step across repositories stays while any of them matches. */
+const listedSteps = computed(() =>
+	steps.filter((step) =>
+		step.repos.some((repo) => matches({ repo, title: step.title }, query.value)),
+	),
+);
 const listedWaiting = computed(() => waiting.filter((entry) => matches(entry.item, query.value)));
 const listedPulls = computed(() => pulls.filter((row) => matches(row.item, query.value)));
 const listedBots = computed(() =>
@@ -115,6 +127,20 @@ const listedUnreleased = computed(() =>
 		}))
 		.filter((repo) => repo.fixes.length > 0),
 );
+/** A repository that matches keeps all its issues. */
+const listedIssueGroups = computed(() =>
+	issueGroups
+		.map((group) => ({
+			...group,
+			issues: matches({ repo: group.repo, title: '' }, query.value)
+				? group.issues
+				: group.issues.filter((row) => matches(row.item, query.value)),
+		}))
+		.filter((group) => group.issues.length > 0),
+);
+const listedIssueCount = computed(() =>
+	listedIssueGroups.value.reduce((sum, group) => sum + group.issues.length, 0),
+);
 const listedBacklog = computed(() =>
 	backlogRows.filter((row) => matches({ repo: row.repo, title: '' }, query.value)),
 );
@@ -127,7 +153,15 @@ const tabs = computed((): Tab[] => {
 	const pullCount =
 		listedPulls.value.length +
 		listedBots.value.reduce((sum, group) => sum + group.pulls.length, 0);
+	const urgencies = new Set(listedSteps.value.map((step) => step.urgency));
 	return [
+		{
+			id: 'next-up',
+			label: 'Next up',
+			count: listedSteps.value.length,
+			counted: listedSteps.value.length === 1 ? 'step' : 'steps',
+			tone: urgencies.has('now') ? 'range' : urgencies.has('soon') ? 'stale-lock' : 'current',
+		},
 		{
 			id: 'waiting',
 			label: 'Waiting on us',
@@ -158,6 +192,13 @@ const tabs = computed((): Tab[] => {
 			tone: 'stale-lock',
 		},
 		{
+			id: 'open-issues',
+			label: 'Open issues',
+			count: listedIssueCount.value,
+			counted: 'open issues',
+			tone: 'ahead',
+		},
+		{
 			id: 'backlog',
 			label: 'Backlog',
 			count: listedTotal.value.issues,
@@ -166,7 +207,21 @@ const tabs = computed((): Tab[] => {
 		},
 	];
 });
-const selected = ref(tabs.value[0]?.id ?? 'waiting');
+const selected = ref(tabs.value[0]?.id ?? 'next-up');
+
+/** Like a click on the tab, which replaces the hash rather than add to the history. */
+function show(id: string): void {
+	selected.value = id;
+	history.replaceState(history.state, '', `#${id}`);
+	document.getElementById(id)?.scrollIntoView({ block: 'nearest' });
+}
+const tabLabel = (id: string): string => tabs.value.find((tab) => tab.id === id)?.label ?? id;
+
+const URGENCY: Record<Urgency, { label: string; mark: string; tone: string }> = {
+	now: { label: 'Now', mark: '✗', tone: 'range' },
+	soon: { label: 'Soon', mark: '↑', tone: 'stale-lock' },
+	later: { label: 'Later', mark: '»', tone: 'ahead' },
+};
 
 const KIND: Record<OpenItem['kind'], string> = { issue: 'Issue', pull: 'Pull request' };
 
@@ -206,6 +261,75 @@ const search = (repo: string, q: string): string => searchUrl(org, repo, q);
 				</div>
 
 				<TabBar v-model="selected" :tabs="tabs" label="Parts of the issues page" />
+
+				<section
+					v-show="selected === 'next-up'"
+					id="next-up-panel"
+					role="tabpanel"
+					aria-labelledby="next-up"
+				>
+					<p class="hint">
+						What the other tabs say needs doing, in one list. Now: someone outside waited more
+						than {{ WAIT_DAYS }} days, or a pull request is stuck. Soon: someone outside
+						waits, a pull request waits for a review, or an issue blocks others. Later: fixes
+						waited more than {{ WAIT_DAYS }} days for a release, bots' updates, and links to
+						clean up.
+					</p>
+					<div v-if="listedSteps.length > 0" class="scroll" tabindex="0">
+						<table>
+							<thead>
+								<tr>
+									<th scope="col">When</th>
+									<th scope="col">Why</th>
+									<th scope="col">Repository</th>
+									<th scope="col">What</th>
+									<th scope="col">Since</th>
+									<th scope="col">Details</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr
+									v-for="step in listedSteps"
+									:key="`${step.tab} ${step.url} ${step.title}`"
+								>
+									<td class="nowrap" :class="`is-${URGENCY[step.urgency].tone}`">
+										<span class="mark" aria-hidden="true">{{
+											URGENCY[step.urgency].mark
+										}}</span
+										>{{ URGENCY[step.urgency].label }}
+									</td>
+									<td class="nowrap">{{ step.reason }}</td>
+									<td>
+										<ul class="repos">
+											<li v-for="repo in step.repos" :key="repo">
+												<a :href="repoUrl(repo)">{{ repo }}</a>
+											</li>
+										</ul>
+									</td>
+									<td class="title">
+										<a :href="step.url">{{ step.title }}</a>
+										<span v-if="step.number !== null" class="dim">
+											#{{ step.number }}</span
+										>
+									</td>
+									<td class="nowrap dim">{{ step.since ? when(step.since) : '' }}</td>
+									<td class="nowrap">
+										<a :href="`#${step.tab}`" @click.prevent="show(step.tab)">{{
+											tabLabel(step.tab)
+										}}</a>
+									</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+					<p v-else class="empty">
+						<template v-if="filtering">No step matches the filter.</template>
+						<template v-else>
+							Nothing needs doing. Pick something from
+							<a href="#open-issues" @click.prevent="show('open-issues')">Open issues</a>.
+						</template>
+					</p>
+				</section>
 
 				<section
 					v-show="selected === 'waiting'"
@@ -525,6 +649,91 @@ const search = (repo: string, q: string): string => searchUrl(org, repo, q);
 				</section>
 
 				<section
+					v-show="selected === 'open-issues'"
+					id="open-issues-panel"
+					role="tabpanel"
+					aria-labelledby="open-issues"
+				>
+					<p class="hint">
+						Every open issue, by repository: the core first and the internal helpers last, and
+						within a category whatever most repositories depend on. In each repository the
+						issues that block others come first, then the most recently touched. Untouched for
+						{{ STALE_ISSUE_DAYS }} days is marked.
+					</p>
+					<div v-if="listedIssueGroups.length > 0" class="scroll" tabindex="0">
+						<table>
+							<thead>
+								<tr>
+									<th scope="col">Issue</th>
+									<th scope="col">Labels</th>
+									<th scope="col">Links</th>
+									<th scope="col">Updated</th>
+									<th scope="col">Opened</th>
+								</tr>
+							</thead>
+							<tbody v-for="group in listedIssueGroups" :key="group.repo">
+								<tr class="group">
+									<th colspan="5" scope="rowgroup">
+										<a :href="repoUrl(group.repo)">{{ group.repo }}</a>
+										<span class="dim">
+											{{ group.category ?? 'not in the graph'
+											}}<template v-if="group.usedBy > 0"
+												>, used by {{ group.usedBy }}</template
+											>,
+											<a :href="search(group.repo, 'is:issue is:open')"
+												>{{ group.issues.length }}
+												{{ group.issues.length === 1 ? 'issue' : 'issues' }}</a
+											>
+										</span>
+									</th>
+								</tr>
+								<tr v-for="row in group.issues" :key="row.item.url">
+									<td class="title">
+										<a :href="row.item.url">{{ row.item.title }}</a>
+										<span class="dim"> #{{ row.item.number }}</span>
+									</td>
+									<td>
+										<span v-for="label in row.item.labels" :key="label" class="tag">{{
+											label
+										}}</span>
+									</td>
+									<td>
+										<ul class="states">
+											<li v-if="row.blocks > 0" class="is-stale-lock">
+												<span class="mark" aria-hidden="true">↑</span>Blocks
+												{{ row.blocks }}
+											</li>
+											<li v-if="row.waitsFor > 0" class="is-unknown">
+												Waits for {{ row.waitsFor }}
+											</li>
+											<li v-if="row.subIssues > 0" class="is-ahead">
+												{{ row.subIssues }}
+												{{ row.subIssues === 1 ? 'sub-issue' : 'sub-issues' }}
+											</li>
+											<li v-if="row.item.actor === 'outsider'" class="is-ahead">
+												From {{ row.item.author ?? 'a deleted account' }}
+											</li>
+										</ul>
+									</td>
+									<td
+										class="nowrap"
+										:class="row.stale ? 'is-stale-lock' : { dim: !row.active }"
+									>
+										<span v-if="row.stale" class="mark" aria-hidden="true">✗</span>
+										{{ when(row.item.updatedAt) }}
+										<span v-if="row.stale" class="visually-hidden">, untouched</span>
+									</td>
+									<td class="nowrap dim">{{ when(row.item.createdAt) }}</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+					<p v-else class="empty">
+						{{ filtering ? 'No open issue matches the filter.' : 'No open issue anywhere.' }}
+					</p>
+				</section>
+
+				<section
 					v-show="selected === 'backlog'"
 					id="backlog-panel"
 					role="tabpanel"
@@ -663,8 +872,21 @@ h2 {
 }
 
 td.is-range,
-td.is-stale-lock {
+td.is-stale-lock,
+td.is-ahead {
 	color: var(--st-color);
+}
+
+/* A repository's heading row opens its issues. */
+tr.group th {
+	padding-top: 16px;
+	font-weight: 600;
+	text-align: left;
+
+	.dim {
+		margin-left: 8px;
+		font-weight: 400;
+	}
 }
 
 /* Wide enough that a narrow screen scrolls the table rather than squeeze the titles. */

@@ -4,8 +4,10 @@ import {
 	EDGE_KIND_META,
 	dependencyLinks,
 	dependencyOf,
+	repoImportance,
 	sortEdges,
 	type Edge,
+	type RepoNode,
 } from './model';
 
 const edge = (from: string, to: string, kind: Edge['kind'], detail = ''): Edge => ({
@@ -118,5 +120,48 @@ describe('sortEdges', () => {
 		const edges = [edge('b', 'a', 'npm'), edge('a', 'b', 'npm')];
 		sortEdges(edges);
 		expect(edges[0].from).toBe('b');
+	});
+});
+
+describe('repoImportance', () => {
+	const repo = (name: string, tags: string[]): RepoNode => ({
+		name,
+		tags,
+		description: null,
+		language: null,
+		fork: false,
+		archived: false,
+	});
+	const tag = (id: string) => ({ id, title: id.toUpperCase(), summary: '' });
+
+	it('orders by category, then by how many depend on a repository, then by name', () => {
+		const result = repoImportance({
+			org: 'org',
+			tags: [tag('core'), tag('tools')],
+			repos: [
+				repo('tool', ['tools']),
+				repo('lonely', ['core']),
+				repo('style', ['core', 'tools']),
+				repo('server', ['core']),
+				repo('stray', ['unknown']),
+				repo('another', ['core']),
+			],
+			edges: [
+				edge('server', 'style', 'npm'),
+				edge('server', 'style', 'download'),
+				edge('tool', 'style', 'npm'),
+				edge('tool', 'server', 'npm'),
+				// A dispatch is a dependency the other way round.
+				edge('lonely', 'tool', 'dispatch'),
+			],
+		});
+		expect(result.map((entry) => [entry.name, entry.category, entry.usedBy])).toEqual([
+			['style', 'CORE', 2],
+			['lonely', 'CORE', 1],
+			['server', 'CORE', 1],
+			['another', 'CORE', 0],
+			['tool', 'TOOLS', 0],
+			['stray', 'unknown', 0],
+		]);
 	});
 });
