@@ -390,7 +390,7 @@ export function lockedVersion(usage: Usage, lockPath: string, text: string): str
 
 export function registryUrl(ecosystem: Ecosystem, name: string): string {
 	return ecosystem === 'npm'
-		? `https://registry.npmjs.org/${name.replace('/', '%2f')}`
+		? `https://registry.npmjs.org/${name.replaceAll('/', '%2f')}`
 		: `https://crates.io/api/v1/crates/${encodeURIComponent(name)}`;
 }
 

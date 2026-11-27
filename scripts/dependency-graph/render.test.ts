@@ -167,6 +167,19 @@ describe('renderPage', () => {
 		expect(withPipe).toContain('reads a\\|b files');
 	});
 
+	it('escapes a backslash so it cannot cancel the pipe escape', () => {
+		const withBackslash = renderPage({
+			graph: {
+				...graph,
+				repos: [repo('odd', ['library'], 'reads a\\|b files')],
+				edges: [],
+			},
+			branches: new Map(),
+			skipped: [],
+		});
+		expect(withBackslash).toContain('reads a\\\\\\|b files');
+	});
+
 	it('leaves out a tag that nothing carries', () => {
 		const unused = renderPage({
 			graph: {

@@ -274,6 +274,7 @@ describe('registries', () => {
 		expect(registryUrl('npm', '@versatiles/style')).toBe(
 			'https://registry.npmjs.org/@versatiles%2fstyle',
 		);
+		expect(registryUrl('npm', 'a/b/c')).toBe('https://registry.npmjs.org/a%2fb%2fc');
 		expect(registryUrl('cargo', 'versatiles_core')).toBe(
 			'https://crates.io/api/v1/crates/versatiles_core',
 		);

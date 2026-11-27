@@ -39,7 +39,7 @@ function sourceUrl(org: string, edge: Edge, defaultBranch: string): string {
 
 /** Escapes the characters that would break out of a Markdown table cell. */
 function cell(text: string): string {
-	return text.replace(/\|/g, '\\|');
+	return text.replace(/[\\|]/g, '\\$&');
 }
 
 function table(headers: string[], rows: string[][]): string[] {
